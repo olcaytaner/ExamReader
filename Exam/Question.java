@@ -46,8 +46,10 @@ public class Question {
                         // dosya adını al.
                         String fileName = path.getFileName().toString().toLowerCase();
 
+                        String studentNo = fileName.substring(0, 7);
+
                         if (fileName.endsWith(".txt")) {
-                            StudentCode student = new StudentCode(false, 1, path.toString());
+                            StudentCode student = new StudentCode(false,studentNo, 1, path.toString());
                             students.add(student);
                             studentNum.getAndIncrement();
                         }
@@ -84,6 +86,7 @@ public class Question {
 
         System.out.println(refCodeNum.get() + " new refCode object created.");
     }
+
 
 
 

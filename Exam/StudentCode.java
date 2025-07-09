@@ -8,10 +8,12 @@ import java.util.List;
 import java.util.regex.*;
 
 public class StudentCode extends Code {
-    protected boolean skip;
+    private boolean skip;
+    private String studentNo;
 
-    public StudentCode( boolean skip, int refCodeNo, String path) throws IOException {
+    public StudentCode( boolean skip, String studentNo, int refCodeNo, String path) throws IOException {
         super(refCodeNo, path);
+        this.studentNo = studentNo;
         this.skip = skip;
         loadAssessments(path);
     }
@@ -37,6 +39,17 @@ public class StudentCode extends Code {
         parseFile(lines);
     }
 
+    public void setSkip(boolean skip) {
+        this.skip = skip;
+    }
+
+    public String getStudentNo() {
+        return studentNo;
+    }
+
+    public void setStudentNo(String studentNo) {
+        this.studentNo = studentNo;
+    }
 
     public boolean isSkip() {
         return skip;

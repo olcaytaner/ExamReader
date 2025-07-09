@@ -2,21 +2,24 @@ package org.example.Exam;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class Exam {
     private ArrayList<Question> questions;
     private String examName;
     private String directory;
 
-    public Exam(String directory, String examName) {
+    public Exam(String directory, String examName) throws IOException {
         this.examName = examName;
         this.directory = directory;
         this.questions = new ArrayList<Question>();
         loadQuestionsFromFolder(directory);
     }
 
-    private void loadQuestionsFromFolder(String rootPath) {
+    private void loadQuestionsFromFolder(String rootPath) throws IOException {
         int questionNum = 0; //only to determine the total created question object
         File root = new File(rootPath);
         File[] filesAndFolders = root.listFiles();
@@ -27,19 +30,28 @@ public class Exam {
             String name = file.getName();
             String fileDirectory= file.getAbsolutePath();
             if (name.startsWith("Q")) {
-                try {
-                    String numberPart = name.substring(1);
-                    int questionNo = Integer.parseInt(numberPart);
-                    questions.add(new Question(String.valueOf(questionNo), fileDirectory));
+                    String questionNo = name.substring(1);
+                    questions.add(new Question(questionNo, fileDirectory));
                     questionNum++;
-                } catch (NumberFormatException e) {
-                    System.err.println("Invalid file or folder name : " + name);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
             }
         }
         System.out.println(questionNum + " question object created");
+    }
+
+
+    public String getStudentCode (String questionNo, String studentNo) throws IOException {
+        String code = "";
+        for ( Question question: this.questions){
+            if(question.getQuestionNo().equals(questionNo)){
+                Question currentQ = question;
+                for (StudentCode student: currentQ.getStudents()){
+                    if(student.getStudentNo().equals(studentNo)){
+                        code = Files.readString(Path.of(student.getPath()));
+                    }
+                }
+            }
+        }
+        return code;
     }
 
 

@@ -408,7 +408,7 @@ public class Assessment {
     public static ArrayList<ArrayList<Pair<Integer, LineType>>> convertFromString(String codeBlock) {
         ArrayList<ArrayList<Pair<Integer, LineType>>> result = new ArrayList<>();
 
-        ArrayList<Pair<Integer, LineType>> singleBlock = ass.convertFromCodeBlock(codeBlock);
+        ArrayList<Pair<Integer, LineType>> singleBlock = convertFromCodeBlock(codeBlock);
 
         if (!singleBlock.isEmpty()) {
             result.add(singleBlock);  // Beklenen format: Liste içinde tek blok

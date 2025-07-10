@@ -1,4 +1,4 @@
-package org.example.Exam;
+package Exam;
 
 import org.example.BracesNotMatchException;
 import org.example.Graph.Graph;

@@ -1,12 +1,8 @@
 package Exam;
 
-import org.example.BracesNotMatchException;
-import org.example.Graph.Graph;
-import org.example.Graph.LineConverter;
-import org.example.Graph.LineType;
-import org.example.Pair;
+import Graph.*;
+import javafx.util.Pair;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.*;
 
@@ -182,7 +178,7 @@ public class Assessment {
 
 
     /**
-     * Determines the type of given line and returns it as a LineType.
+     * Determines the type of given line and returns it as a Graph.LineType.
      * @param line
      * @return types in that line as arraylist
      */

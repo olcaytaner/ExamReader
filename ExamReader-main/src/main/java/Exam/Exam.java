@@ -4,7 +4,12 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Comparator;
+import Exam.Assessment;
+
 
 public class Exam {
     private ArrayList<Question> questions;
@@ -60,6 +65,200 @@ public class Exam {
 
     public String getDirectory() {
         return directory;
+    }
+
+    public void exportGradingPNGs(String gradingRootDir, String examTypeLetter) throws IOException {
+        Path gradingRoot = Paths.get(gradingRootDir);
+        Files.createDirectories(gradingRoot);
+
+        String typeSuffix = (examTypeLetter != null && !examTypeLetter.isBlank()) ? examTypeLetter : "";
+
+        for (Question q : this.questions) {
+
+            // --------- REF CODE ---------
+            for (RefCode ref : q.getRefcodes()) {
+                ArrayList<Assessment> refAssess = ref.getAssessments();
+                for (int i = 0; i < refAssess.size(); i++) {
+                    Assessment a = refAssess.get(i);
+                    int refScore = a.getGrade();
+
+                    String caseFolderName = sanitize(
+                            String.format("%s, Question %s, A%d%s",
+                                    this.examName, q.getQuestionNo(), i + 1, typeSuffix)
+                    );
+
+                    Path caseDir = gradingRoot
+                            .resolve(String.valueOf(refScore))
+                            .resolve(caseFolderName);
+
+                    Files.createDirectories(caseDir);
+
+                    // Ref PNG'leri caseDir'in köküne
+                    renderAssessmentPNGsTo(caseDir, a, "ref");
+
+                    // --------- ÖĞRENCİLER ---------
+                    for (StudentCode st : q.getStudents()) {
+                        if (st.isSkip()) continue;
+
+                        // Öğrencinin aynı indexteki assessment'ı varsa al
+                        if (i < st.getAssessments().size()) {
+                            Assessment sa = st.getAssessments().get(i);
+                            int stuScore = sa.getGrade();
+
+                            Path stuBucket = caseDir.resolve(String.valueOf(stuScore));
+                            Files.createDirectories(stuBucket);
+
+                            renderAssessmentPNGsTo(stuBucket, sa, st.getStudentNo());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+// --- yardımcılar ---
+
+    private void renderAssessmentPNGsTo(Path destDir, Assessment a, String prefix) throws IOException {
+        Path tmpDir = Files.createTempDirectory("graphviz_tmp_");
+        try {
+            if (a.getAbstractSyntaxTree() != null) {
+                saveOnlyPng(a.getAbstractSyntaxTree(), tmpDir, destDir, prefix + "-ast");
+            }
+            if (a.getControlFlowGraph() != null) {
+                saveOnlyPng(a.getControlFlowGraph(), tmpDir, destDir, prefix + "-cfg");
+            }
+            if (a.getDataDependencyGraph() != null) {
+                saveOnlyPng(a.getDataDependencyGraph(), tmpDir, destDir, prefix + "-ddg");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Graphviz işlemi kesildi", e);
+        } finally {
+            deleteDirectoryRecursive(tmpDir);
+        }
+    }
+
+    private void saveOnlyPng(Graph.Graph g,
+                             Path tmpDir,
+                             Path destDir,
+                             String baseName) throws IOException, InterruptedException {
+        g.saveGraphviz(tmpDir.toString(), baseName, baseName); // DOT + PNG tmp'te
+        Files.createDirectories(destDir);
+        Files.move(tmpDir.resolve(baseName + ".png"),
+                destDir.resolve(baseName + ".png"),
+                StandardCopyOption.REPLACE_EXISTING);
+        // DOT tmp'te kalır; tmp klasörü en sonda siliniyor.
+    }
+
+    private static void deleteDirectoryRecursive(Path dir) throws IOException {
+        if (!Files.exists(dir)) return;
+        Files.walk(dir)
+                .sorted(Comparator.reverseOrder())
+                .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
+    }
+
+    private static String sanitize(String name) {
+        // Windows için yasaklı karakterleri güvenli hale getir
+        return name.replaceAll("[\\\\/:*?\"<>|]", "-").trim();
+    }
+    public StudentCode getStudentObject(String questionNo, String studentNo) throws IOException {
+        StudentCode studentR = null;
+        for ( Question question: this.questions){
+            if(question.getQuestionNo().equals(questionNo)){
+                Question currentQ = question;
+                for (StudentCode student: currentQ.getStudents()){
+                    if(student.getStudentNo().equals(studentNo)){
+                        studentR = student;
+                    }
+                }
+            }
+        }
+        return studentR;
+    }
+
+    // Exam.java içine ekle
+
+    // Yalnız AST
+    public void checkAllStudentsAST() {
+        for (Question question : questions) {
+            String qNo = question.getQuestionNo();
+            for (StudentCode student : question.getStudents()) {
+                try {
+                    boolean anyFail = false;
+                    for (Assessment a : student.getAssessments()) {
+                        if (a.isAstFailed()) {
+                            System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> AST not done");
+                            anyFail = true;
+                        }
+                    }
+                    // İstersen hiç assessment yoksa da uyar:
+                    // if (!anyFail && student.getAssessments().isEmpty()) {
+                    //     System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> AST not done (no assessments)");
+                    // }
+                } catch (Exception e) {
+                    System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> AST not done");
+                }
+            }
+        }
+    }
+
+    // Yalnız CFG
+    public void checkAllStudentsCFG() {
+        for (Question question : questions) {
+            String qNo = question.getQuestionNo();
+            for (StudentCode student : question.getStudents()) {
+                try {
+                    for (Assessment a : student.getAssessments()) {
+                        if (a.isCfgFailed() || a.getControlFlowGraph() == null) {
+                            System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> CFG not done");
+                            break; // bir tanesi bile fail ise yazıp geç
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> CFG not done");
+                }
+            }
+        }
+    }
+
+    // Yalnız DDG
+    public void checkAllStudentsDDG() {
+        for (Question question : questions) {
+            String qNo = question.getQuestionNo();
+            for (StudentCode student : question.getStudents()) {
+                try {
+                    for (Assessment a : student.getAssessments()) {
+                        if (a.isDdgFailed() || a.getDataDependencyGraph() == null) {
+                            System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> DDG not done");
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> DDG not done");
+                }
+            }
+        }
+    }
+
+    // Hepsi bir arada (AST/CFG/DDG)
+    public void checkAllStudentsGraphs() {
+        for (Question question : questions) {
+            String qNo = question.getQuestionNo();
+            for (StudentCode student : question.getStudents()) {
+                for (Assessment a : student.getAssessments()) {
+                    if (a.isAstFailed() ) {
+                        System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> AST not done");
+                    }
+                    if ((a.isCfgFailed() || a.getControlFlowGraph() == null)) {
+                        System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> CFG not done");
+                    }
+                    if ((a.isDdgFailed() || a.getDataDependencyGraph() == null)) {
+                        System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> DDG not done");
+                    }
+
+                }
+            }
+        }
     }
 }
 

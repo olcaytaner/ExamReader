@@ -12,6 +12,10 @@ public class Question {
     private final String questionNo;
     private String directory;
 
+    public ArrayList<RefCode> getRefcodes() {
+        return refcodes;
+    }
+
     public Question(String questionNo , String directory) throws IOException {
         this.students = new ArrayList<StudentCode>();
         this.refcodes = new ArrayList<RefCode>();

@@ -1,85 +1,104 @@
 package Graph;
 
-import java.util.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.HashSet;
 
-/**
- * Kenar eklenme sırasını koruyor,
- * DFS destekleyen graph yapısı.
- */
 public class Graph {
 
-    /** Kenar numarası -> Kenar */
-    private final TreeMap<Integer, Edge> edges = new TreeMap<>();
+    private final HashMap<String, HashSet<String>> graph;
 
-    // Her eklemede artan sıra numarası
-    // Böylece tree mapde sıralı bir şekilde tutup printleyebilicez.
-    private int seq = 0;
-
-    /** inner class: directed edge */
-    private static class Edge {
-        final String from;
-        final String to;
-        Edge(String from, String to) {
-            this.from = from;
-            this.to   = to;
-        }
+    public Graph() {
+        this.graph = new HashMap<>();
     }
 
-    /** Yeni kenar ekle: eklenme sırası otomatik tutulur */
     public void put(String from, String to) {
-        edges.put(seq++, new Edge(from, to));
+        if (!graph.containsKey(from)) {
+            graph.put(from, new HashSet<>());
+        }
+        graph.get(from).add(to);
     }
 
-    /** Eklenme sırasına göre kenarları yazdır */
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        for (Edge e : edges.values()) {
-            sb.append(e.from).append(" -> ").append(e.to).append('\n');
-        }
-        return sb.toString();
-    }
-
-    /** Bir düğümün çocuklarını (eklenme sırasına göre) getirir */
-    public List<String> getChildren(String node) {
-        List<String> out = new ArrayList<>();
-        for (Edge e : edges.values()) {
-            if (e.from.equals(node)) {
-                out.add(e.to);
+        StringBuilder str = new StringBuilder();
+        for (String node : graph.keySet()) {
+            for (String key : graph.get(node)) {
+                str.append(node).append( " -> ").append(key).append("\n");
             }
         }
-        return out;
+        return str.toString();
     }
 
-    /** Kök düğüm
-     *
-     * @return
-     */
-    public String getRoot() {
-        return "start";
-    }
-
-    public void printDFS() {
-        printDFSRecursive(getRoot(), 0, new HashSet<>());
-    }
-
-    private void printDFSRecursive(String node, int depth, Set<String> visited) {
-        if (visited.contains(node)) return;
-        visited.add(node);
-
-        System.out.println("    ".repeat(depth) + node);
-
-        for (String child : getChildren(node)) {
-            printDFSRecursive(child, depth + 1, visited);
-        }
-    }
-
-    /**  (kenar sırası da korunur) */
     public Graph clone() {
-        Graph g = new Graph();
-        for (Edge e : this.edges.values()) {
-            g.put(e.from, e.to);
+        Graph graph = new Graph();
+        for (String key : this.graph.keySet()) {
+            for (String value : this.graph.get(key)) {
+                graph.put(key, value);
+            }
         }
-        return g;
+        return graph;
     }
+    public HashMap<String, HashSet<String>> getGraph() {
+        return this.graph;
+    }
+    public String toGraphvizString(String graphName) {
+        StringBuilder dot = new StringBuilder();
+        dot.append("digraph \"").append(escapeDot(graphName)).append("\" {\n");
+        dot.append("    node [shape=box];\n");
+
+        java.util.Set<String> allNodes = new java.util.HashSet<>();
+        for (String from : this.graph.keySet()) {
+            allNodes.add(from);
+            for (String to : this.graph.get(from)) {
+                allNodes.add(to);
+            }
+        }
+
+        for (String from : this.graph.keySet()) {
+            for (String to : this.graph.get(from)) {
+                dot.append("    \"").append(escapeDot(from)).append("\" -> \"").append(escapeDot(to)).append("\";\n");
+            }
+        }
+
+        for (String node : allNodes) {
+            dot.append("    \"").append(escapeDot(node)).append("\" [label=\"").append(escapeDot(node)).append("\"];\n");
+        }
+
+        dot.append("}\n");
+        return dot.toString();
+    }
+
+    public void saveGraphviz(String outputDir, String baseName, String graphName)
+            throws IOException, InterruptedException {
+
+        if (outputDir == null || outputDir.isEmpty()) {
+            outputDir = System.getProperty("user.home") + File.separator + "Desktop";
+        }
+        File dir = new File(outputDir);
+        if (!dir.exists()) dir.mkdirs();
+
+        String dotPath = new File(dir, baseName + ".dot").getAbsolutePath();
+        String pngPath = new File(dir, baseName + ".png").getAbsolutePath();
+
+        try (FileWriter writer = new FileWriter(dotPath)) {
+            writer.write(toGraphvizString(graphName));
+        }
+
+        String[] cmd = {"dot", "-Tpng", dotPath, "-o", pngPath};
+        Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+        int exit = process.waitFor();
+        if (exit != 0) {
+            throw new IOException("'dot' komutu başarısız oldu. DOT dosyası: " + dotPath);
+        }
+    }
+
+    private static String escapeDot(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+
 }

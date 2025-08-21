@@ -31,7 +31,14 @@ public class Code {
                 while (i < lines.size() && !lines.get(i).trim().endsWith("*/")) {
                     String t = lines.get(i).trim().replaceFirst("^\\*\\s?", "");
                     if (t.startsWith("@grade")) {
-                        grade = Integer.parseInt(t.substring(6).trim());
+                        String gradeRaw = t.substring(6).trim(); // "85 pts" gibi olabilir
+                        String gradeOnly = gradeRaw.split(" ")[0]; // "85"
+                        try {
+                            grade = Integer.parseInt(gradeOnly);
+                        } catch (NumberFormatException e) {
+                            System.err.println("Geçersiz not formatı: " + gradeRaw);
+                            grade = 0; // fallback
+                        }
                     } else if (t.startsWith("@feedback")) {
                         feedback = t.substring(9).trim();
                     } else if (t.startsWith("@violation")) {

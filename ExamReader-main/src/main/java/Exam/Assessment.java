@@ -14,6 +14,14 @@ public class Assessment {
     private final String codeBlock;
     private Graph abstractSyntaxTree;
     private Graph controlFlowGraph;
+    private Graph dataDependencyGraph;
+    private boolean astFailed = false;
+    private boolean cfgFailed = false;
+    private boolean ddgFailed = false;
+
+    public boolean isAstFailed() { return astFailed; }
+    public boolean isCfgFailed() { return cfgFailed; }
+    public boolean isDdgFailed() { return ddgFailed; }
 
     public Assessment(int grade, String feedback, boolean violation, String violationString, String codeBlock) {
         this.grade    = grade;
@@ -24,6 +32,7 @@ public class Assessment {
 
         generateASTGraph();
         generateCFGGraph();
+        generateDDGGraph();
     }
 
 
@@ -56,6 +65,12 @@ public class Assessment {
         return feedback;
     }
 
+
+    public Graph getControlFlowGraph() { return controlFlowGraph; }
+
+    public Graph getDataDependencyGraph() { return dataDependencyGraph; }
+
+
     public static ArrayList<String> extractTokens(String line) {
         ArrayList<String> tokens = new ArrayList<>();
         int i = 0;
@@ -87,6 +102,61 @@ public class Assessment {
         }
         return tokens;
     }
+    public static ArrayList<String> extractTokensWithDots(String line) {
+        ArrayList<String> tokens = new ArrayList<>();
+        boolean dot = false;
+        int i = 0;
+        while (i < line.length()) {
+            char c = line.charAt(i);
+
+            if (Character.isLetter(c)) {
+                StringBuilder sb = new StringBuilder();
+                while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
+                    sb.append(line.charAt(i));
+                    i++;
+                }
+                tokens.add(sb.toString());
+
+                if (i < line.length() && line.charAt(i) == '.') {
+                    i++;
+                    StringBuilder full = new StringBuilder(sb);
+                    full.append('.');
+
+                    StringBuilder seg = new StringBuilder();
+                    while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
+                        full.append(line.charAt(i));
+                        seg.append(line.charAt(i));
+                        i++;
+                    }
+                    tokens.add(full.toString());
+                }
+            }
+
+            else if (Character.isDigit(c)) {
+                StringBuilder sb = new StringBuilder();
+                while (i < line.length() && Character.isDigit(line.charAt(i))) {
+                    sb.append(line.charAt(i));
+                    i++;
+                }
+                tokens.add(sb.toString());
+            }
+
+            else if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
+                StringBuilder sb = new StringBuilder();
+                while (i < line.length() && "=+-*/%<>!&|;,".indexOf(line.charAt(i)) >= 0 ){
+                    sb.append(line.charAt(i));
+                    i++;
+                }
+                tokens.add(sb.toString());
+            }
+
+            else {
+                i++;
+            }
+        }
+        return tokens;
+    }
+
 
     ///////////////////////////////////////////////////////////////
     private static String constructAST(String parent, Graph graph, String line, int j, LineType lineType) {
@@ -136,11 +206,6 @@ public class Assessment {
             }
         }
         return j;
-    }
-    private boolean astFailed = false;
-
-    public boolean isAstFailed() {
-        return astFailed;
     }
 
 
@@ -685,12 +750,154 @@ public class Assessment {
             this.controlFlowGraph = graph;
         } catch (Exception e) {
             System.err.println("Cannot generate CFG: " + e.getMessage());
+            cfgFailed= true;
         }
     }
 
 
 
 
+    private Set<Pair<Integer, String>> getWrittenVars(String line, int lineNumber) {
+        Set<Pair<Integer, String>> result = new HashSet<>();
+        ArrayList<String> tokens = extractTokens(line);
+
+        for (int i = 0; i < tokens.size(); i++) {
+            String token = tokens.get(i);
+            if (token.equals("=") && i > 0) {
+                String left = tokens.get(i - 1);
+                if (isVariable(left)) {
+                    result.add(new Pair<>(lineNumber, left));
+                }
+            }
+
+
+
+        }
+
+        return result;
+    }
+
+
+    private Set<Pair<Integer, String>> getReadVars(String line, int lineNumber) {
+        Set<Pair<Integer, String>> result = new HashSet<>();
+        ArrayList<String> tokens = extractTokensWithDots(line);
+
+        boolean reading = false;
+
+
+        for (int i = 0; i< tokens.size();i++) {
+            if (tokens.get(i).equals("=")) {
+                reading = true;
+                continue;
+            }
+
+            if (reading && isVariable(tokens.get(i))) {
+                result.add(new Pair<>(lineNumber, tokens.get(i)));
+            }
+        }
+
+        // if / while / for koşulundaki değişkenleri ekle
+        // for kısmı biraz karışık NASIL YAPALIM?
+        if (line.contains("if") || line.contains("while") || line.contains("for")) {
+            int open = line.indexOf("(");
+            int close = line.lastIndexOf(")");
+            if (open >= 0 && close > open) {
+                String condition = line.substring(open + 1, close);
+                ArrayList<String> condTokens = extractTokens(condition);
+                for (String token : condTokens) {
+                    if (isVariable(token)) {
+                        result.add(new Pair<>(lineNumber, token));
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+
+    private void generateDDGGraph() {
+        try {
+            Graph graph = new Graph();
+            Map<String, List<Integer>> writeMap = new HashMap<>();
+
+            String[] lines = codeBlock.split("\n");
+
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i].trim();
+                int lineNumber = i + 1;
+
+                if (line.isEmpty() || line.startsWith("//")) continue;
+
+                Set<Pair<Integer, String>> writtenVars = getWrittenVars(line, lineNumber);
+                Set<Pair<Integer, String>> readVars = getReadVars(line, lineNumber);
+
+                for (Pair<Integer, String> pair : writtenVars) {
+                    String variable = pair.getValue();
+                    int writeLine = pair.getKey();
+                    writeMap.computeIfAbsent(variable, k -> new ArrayList<>()).add(writeLine);
+                }
+
+                for (Pair<Integer, String> pair : readVars) {
+                    String variable = pair.getValue();
+                    int readLine = pair.getKey();
+
+                    if (writeMap.containsKey(variable)) {
+                        List<Integer> writtenLines = writeMap.get(variable);
+                        Integer lastWrite = null;
+                        for (int writeLine : writtenLines) {
+                            if (writeLine < readLine && (lastWrite == null || writeLine > lastWrite)) {
+                                lastWrite = writeLine;
+                            }
+                        }
+                        if (lastWrite != null) {
+                            String from = "Line " + lastWrite + " (" + variable + ")";
+                            String to = "Line " + readLine + " (" + variable + ")";
+                            graph.put(from, to);
+                        }
+                    }
+                }
+            }
+            this.dataDependencyGraph = graph;
+        } catch (Exception e) {
+            ddgFailed = true;
+            this.dataDependencyGraph = new Graph(); // emniyet
+            System.err.println("Cannot generate DDG: " + e.getMessage());
+        }
+    }
+
+    private static final Set<String> JAVA_KEYWORDS = Set.of(
+            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
+            "class", "const", "continue", "default", "do", "double", "else", "enum",
+            "extends", "final", "finally", "float", "for", "goto", "if", "implements",
+            "import", "instanceof", "int", "interface", "long", "native", "new", "package",
+            "private", "protected", "public", "return", "short", "static", "strictfp",
+            "super", "switch", "synchronized", "this", "throw", "throws", "transient",
+            "try", "void", "volatile", "while", "null", "true", "false"
+    );
+
+
+    private boolean isVariable(String token) {
+        return token.matches("[a-zA-Z_][a-zA-Z0-9_]*") &&
+                !JAVA_KEYWORDS.contains(token);
+    }
+
+    public void toGraphviz(String directory) {
+        try {
+            if (abstractSyntaxTree != null) {
+                abstractSyntaxTree.saveGraphviz(directory, "ast", "AST");
+            }
+            if (controlFlowGraph != null) {
+                controlFlowGraph.saveGraphviz(directory, "cfg", "CFG");
+            }
+            if (dataDependencyGraph != null) {
+                dataDependencyGraph.saveGraphviz(directory, "ddg", "DDG");
+            }
+            System.out.println("Graphviz çıktıları kaydedildi: " + directory);
+        } catch (Exception e) {
+            System.err.println("Graphviz çıktısı alınırken hata: " + e.getMessage());
+        }
+    }
 
 
 

@@ -8,7 +8,6 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
-import Exam.Assessment;
 
 
 public class Exam {
@@ -34,9 +33,9 @@ public class Exam {
             String name = file.getName();
             String fileDirectory= file.getAbsolutePath();
             if (name.startsWith("Q")) {
-                    String questionNo = name.substring(1);
-                    questions.add(new Question(questionNo, fileDirectory));
-                    questionNum++;
+                String questionNo = name.substring(1);
+                questions.add(new Question(questionNo, fileDirectory));
+                questionNum++;
             }
         }
         System.out.println(questionNum + " question object created");
@@ -57,6 +56,7 @@ public class Exam {
         }
         return code;
     }
+
 
 
     public String getExamName() {

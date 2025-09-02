@@ -1,10 +1,11 @@
 package Exam;
 
-import Graph.*;
-
 
 import java.io.FileNotFoundException;
 import java.util.*;
+import Graph.*;
+
+
 
 public class Assessment {
     private final int grade;
@@ -15,6 +16,7 @@ public class Assessment {
     private Graph abstractSyntaxTree;
     private Graph controlFlowGraph;
     private Graph dataDependencyGraph;
+
     private boolean astFailed = false;
     private boolean cfgFailed = false;
     private boolean ddgFailed = false;
@@ -22,6 +24,8 @@ public class Assessment {
     public boolean isAstFailed() { return astFailed; }
     public boolean isCfgFailed() { return cfgFailed; }
     public boolean isDdgFailed() { return ddgFailed; }
+
+
 
     public Assessment(int grade, String feedback, boolean violation, String violationString, String codeBlock) {
         this.grade    = grade;
@@ -41,9 +45,20 @@ public class Assessment {
     // generate cfg
     // print methoduyla exam directory test.
 
+
+
     public Graph getAbstractSyntaxTree() {
         return abstractSyntaxTree;
     }
+
+    public Graph getControlFlowGraph() {
+        return controlFlowGraph;
+    }
+
+    public Graph getDataDependencyGraph() {
+        return dataDependencyGraph;
+    }
+
 
     public String getCodeBlock() {
         return codeBlock;
@@ -64,11 +79,6 @@ public class Assessment {
     public String getFeedback() {
         return feedback;
     }
-
-
-    public Graph getControlFlowGraph() { return controlFlowGraph; }
-
-    public Graph getDataDependencyGraph() { return dataDependencyGraph; }
 
 
     public static ArrayList<String> extractTokens(String line) {
@@ -96,12 +106,22 @@ public class Assessment {
                 tokens.add(sb.toString());
             }
 
+            else if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
+                StringBuilder sb = new StringBuilder();
+                while (i < line.length() && "=+-*/%<>!&|;,".indexOf(line.charAt(i)) >= 0 ){
+                    sb.append(line.charAt(i));
+                    i++;
+                }
+                tokens.add(sb.toString());
+            }
+
             else {
                 i++;
             }
         }
         return tokens;
     }
+
     public static ArrayList<String> extractTokensWithDots(String line) {
         ArrayList<String> tokens = new ArrayList<>();
         boolean dot = false;
@@ -158,7 +178,6 @@ public class Assessment {
     }
 
 
-    ///////////////////////////////////////////////////////////////
     private static String constructAST(String parent, Graph graph, String line, int j, LineType lineType) {
         String fullLine = line + "-" + j;
         String body = fullLine;
@@ -235,7 +254,8 @@ public class Assessment {
             }
         } catch (Exception e) {
             astFailed = true;
-            System.err.println("Cannot generate AST: " + e.getMessage());
+            // BU KISIM FARKLI - çok önemli bir detay değil
+            System.err.println( "not done." );
         }
 
         this.abstractSyntaxTree = graph;
@@ -243,7 +263,7 @@ public class Assessment {
 
 
     /**
-     * Determines the type of given line and returns it as a Graph.LineType.
+     * Determines the type of given line and returns it as a LineType.
      * @param line
      * @return types in that line as arraylist
      */
@@ -288,7 +308,12 @@ public class Assessment {
         for (int j = 0; j < lines.length; j++) {
             String line = lines[j].trim();
             //updated
-            if (line.isEmpty() || line.startsWith("//") || line.startsWith("/") || line.startsWith("") || line.startsWith("*/")) {
+            // BU KISIM FARKLI!! BURADA HATA MI VAR BAK!!
+            if (line.isEmpty()
+                    || line.startsWith("//")
+                    || line.startsWith("/*")
+                    || line.startsWith("*")
+                    || line.startsWith("*/")) {
                 continue;
             }
 
@@ -317,7 +342,7 @@ public class Assessment {
                 boolean hasSemicolon = line.contains(";");
 
                 if (nextIsBrace) {
-                    j++; // Süslü parantez satırını stla
+                    j++; // Süslü parantez satırını atla
                 } else if (!hasBraceOnLine && !hasSemicolon) {
                     // Süslü parantez de noktalı virgül de yoksa otomatik gövde ekle
                     current.add(new Pair<>(lineNumber + 1, LineType.STATEMENT));
@@ -364,7 +389,6 @@ public class Assessment {
         return !stack.isEmpty();
     }
 
-    ///////////////////////////////////////////////////////////////
 
     // type to string methodu. ve yardımcı methodlar
     // construct methodu her satıra karşılık gelen line type'ı graph yapısına ekler
@@ -508,15 +532,15 @@ public class Assessment {
         return graphs;
     }
 
-
-
+    // BU KISIM FARKLI - müjganın exam reader'ı (githubdaki son hali). bendeki exam reader ile aynı.
     public static ArrayList<ArrayList<Graph>> generateGraphsType(String codeBlock) {
         ArrayList<ArrayList<Graph>> graphs = new ArrayList<>();
-        return generateGraphsType(codeBlock);
+        ArrayList<Graph> singleGraphList = generateGraphsFromStringType(codeBlock);
+        graphs.add(singleGraphList);
+        return graphs;
     }
 
 
-    /////////////////////////////////////////////////////////////////////////////
     // content to string methodu.
 
 
@@ -609,8 +633,6 @@ public class Assessment {
     }
 
 
-
-
     public static ArrayList<Graph> generateGraphsFromStringContent(String input) {
         ArrayList<Graph> graphs = new ArrayList<>();
 
@@ -648,7 +670,7 @@ public class Assessment {
     }
 
     //--------------------------------------------------------------------------------------------------------------
-
+    // CFG
 
     private static boolean condition(ArrayList<Pair<Integer, LineType>> lines, ArrayList<String> lasts, String prev) {
         if (lines.get(0).getValue().equals(LineType.CLOSE)) {
@@ -739,21 +761,22 @@ public class Assessment {
         }
     }
 
+    // BU KISIM FARKLI - müjganın exam reader'ı, githubdaki son hali.
     private void generateCFGGraph() {
+        Graph graph = new Graph();
         try {
             ArrayList<Pair<Integer, LineType>> block = convertFromCodeBlock(codeBlock);
-            Graph graph = new Graph();
             String prev = "start-0";
             while (!block.isEmpty()) {
                 prev = addNode(prev, graph, block);
             }
             this.controlFlowGraph = graph;
         } catch (Exception e) {
+            cfgFailed = true;
+            this.controlFlowGraph = new Graph(); // emniyet
             System.err.println("Cannot generate CFG: " + e.getMessage());
-            cfgFailed= true;
         }
     }
-
 
 
 
@@ -769,11 +792,7 @@ public class Assessment {
                     result.add(new Pair<>(lineNumber, left));
                 }
             }
-
-
-
         }
-
         return result;
     }
 
@@ -783,7 +802,6 @@ public class Assessment {
         ArrayList<String> tokens = extractTokensWithDots(line);
 
         boolean reading = false;
-
 
         for (int i = 0; i< tokens.size();i++) {
             if (tokens.get(i).equals("=")) {
@@ -816,6 +834,8 @@ public class Assessment {
     }
 
 
+    //BU KISIM FARKLI
+    //Bu methodda bazı farklılıklar var. teknik değil ama kod okunabilirliği açısından.
     private void generateDDGGraph() {
         try {
             Graph graph = new Graph();
@@ -832,24 +852,39 @@ public class Assessment {
                 Set<Pair<Integer, String>> writtenVars = getWrittenVars(line, lineNumber);
                 Set<Pair<Integer, String>> readVars = getReadVars(line, lineNumber);
 
+                // Yazılan değişkenleri writeMap'e ekle
+                // BU KISIM FARKLI - mğjgan exam reader'ı - bu hali daha doğru görünüyor.
                 for (Pair<Integer, String> pair : writtenVars) {
                     String variable = pair.getValue();
                     int writeLine = pair.getKey();
-                    writeMap.computeIfAbsent(variable, k -> new ArrayList<>()).add(writeLine);
+
+                    // Eğer bu değişken daha önce eklenmemişse liste oluştur
+                    if (!writeMap.containsKey(variable)) {
+                        writeMap.put(variable, new ArrayList<>());
+                    }
+
+                    // Bu satırı write listesine ekle
+                    writeMap.get(variable).add(writeLine);
                 }
 
+                // Okunan değişkenler için: önceki en yakın write’la bağlantı ekle
                 for (Pair<Integer, String> pair : readVars) {
                     String variable = pair.getValue();
                     int readLine = pair.getKey();
 
+                    // Yazılmış satırlar varsa, sadece readLine'dan küçük olanlar dikkate alınmalı
                     if (writeMap.containsKey(variable)) {
                         List<Integer> writtenLines = writeMap.get(variable);
                         Integer lastWrite = null;
                         for (int writeLine : writtenLines) {
-                            if (writeLine < readLine && (lastWrite == null || writeLine > lastWrite)) {
-                                lastWrite = writeLine;
+                            if (writeLine < readLine) {
+                                if (lastWrite == null || writeLine > lastWrite) {
+                                    lastWrite = writeLine;
+                                }
                             }
                         }
+
+                        // En yakın önceki write bulunduysa grafiğe edge ekle
                         if (lastWrite != null) {
                             String from = "Line " + lastWrite + " (" + variable + ")";
                             String to = "Line " + readLine + " (" + variable + ")";
@@ -865,6 +900,8 @@ public class Assessment {
             System.err.println("Cannot generate DDG: " + e.getMessage());
         }
     }
+
+
 
     private static final Set<String> JAVA_KEYWORDS = Set.of(
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
@@ -898,12 +935,6 @@ public class Assessment {
             System.err.println("Graphviz çıktısı alınırken hata: " + e.getMessage());
         }
     }
-
-
-
-
-
-
 
 
 

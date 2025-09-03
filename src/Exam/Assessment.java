@@ -104,6 +104,9 @@ public class Assessment {
                     i++;
                 }
                 tokens.add(sb.toString());
+            }else if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') {
+                tokens.add(String.valueOf(c));
+                i++;
             }
 
             else if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
@@ -159,6 +162,9 @@ public class Assessment {
                     i++;
                 }
                 tokens.add(sb.toString());
+            }else if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') {
+                tokens.add(String.valueOf(c));
+                i++;
             }
 
             else if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
@@ -254,7 +260,6 @@ public class Assessment {
             }
         } catch (Exception e) {
             astFailed = true;
-            // BU KISIM FARKLI - çok önemli bir detay değil
             System.err.println( "not done." );
         }
 
@@ -310,8 +315,7 @@ public class Assessment {
             //updated
             // BU KISIM FARKLI!! BURADA HATA MI VAR BAK!!
             if (line.isEmpty()
-                    || line.startsWith("//")
-                    || line.startsWith("/*")
+                    || line.startsWith("/")
                     || line.startsWith("*")
                     || line.startsWith("*/")) {
                 continue;

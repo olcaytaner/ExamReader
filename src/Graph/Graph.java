@@ -3,8 +3,11 @@ package Graph;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 
 public class Graph {
 
@@ -70,30 +73,28 @@ public class Graph {
         dot.append("}\n");
         return dot.toString();
     }
+    public void saveGraphviz(String directory, String filename, String graphName, Map<String,String> nodeLabelMap) throws IOException {
+        FileWriter writer = new FileWriter(directory + "/" + filename + ".dot");
+        writer.write("digraph \"" + escapeDot(graphName) + "\" {\n");
+        writer.write("    node [shape=box];\n");
 
-    public void saveGraphviz(String outputDir, String baseName, String graphName)
-            throws IOException, InterruptedException {
+        for (String from : graph.keySet()) {
+            for (String to : graph.get(from)) {
+                String fromLabel = nodeLabelMap.getOrDefault(from, from);
+                String toLabel   = nodeLabelMap.getOrDefault(to, to);
 
-        if (outputDir == null || outputDir.isEmpty()) {
-            outputDir = System.getProperty("user.home") + File.separator + "Desktop";
+                writer.write("    \"" + escapeDot(from) + "\" [label=\"" + escapeDot(fromLabel) + "\"];\n");
+                writer.write("    \"" + escapeDot(to) + "\" [label=\"" + escapeDot(toLabel) + "\"];\n");
+                writer.write("    \"" + escapeDot(from) + "\" -> \"" + escapeDot(to) + "\";\n");
+            }
         }
-        File dir = new File(outputDir);
-        if (!dir.exists()) dir.mkdirs();
 
-        String dotPath = new File(dir, baseName + ".dot").getAbsolutePath();
-        String pngPath = new File(dir, baseName + ".png").getAbsolutePath();
-
-        try (FileWriter writer = new FileWriter(dotPath)) {
-            writer.write(toGraphvizString(graphName));
-        }
-
-        String[] cmd = {"dot", "-Tpng", dotPath, "-o", pngPath};
-        Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-        int exit = process.waitFor();
-        if (exit != 0) {
-            throw new IOException("'dot' komutu başarısız oldu. DOT dosyası: " + dotPath);
-        }
+        writer.write("}\n");
+        writer.close();
     }
+
+
+
 
     private static String escapeDot(String s) {
         if (s == null) return "";

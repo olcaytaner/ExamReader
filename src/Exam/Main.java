@@ -7,7 +7,7 @@ public class Main {
     public static void main(String[] args) throws IOException {
         String directory ="C:\\Users\\nermi\\Dropbox\\Midterm1-Annotated";
         //Exam exam = new Exam(directory,"Midterm1");
-        Exam a= new Exam("C:\\Users\\Mujgan\\Dropbox\\Midterm3-Annotated", "Fall2023-M3");
+        Exam a= new Exam("C:\\Users\\Mujgan\\Dropbox\\Midterm2-Annotated", "Fall2023-M2");
         a.exportGradingPNGs("C:\\Users\\Mujgan\\Desktop\\Grading1","M");
        /* Assessment test= new Assessment(2,"",false,"","    if (left->getData() != right->getData()) {\n" +
                 "        return false;\n" +

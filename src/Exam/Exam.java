@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Map;
 
 
 public class Exam {
@@ -122,14 +123,15 @@ public class Exam {
         Path tmpDir = Files.createTempDirectory("graphviz_tmp_");
         try {
             if (a.getAbstractSyntaxTree() != null) {
-                saveOnlyPng(a.getAbstractSyntaxTree(), tmpDir, destDir, prefix + "-ast");
+                saveOnlyPng(a.getAbstractSyntaxTree(), tmpDir, destDir, prefix + "-ast", a.getAstNodeLabels());
             }
             if (a.getControlFlowGraph() != null) {
-                saveOnlyPng(a.getControlFlowGraph(), tmpDir, destDir, prefix + "-cfg");
+                saveOnlyPng(a.getControlFlowGraph(), tmpDir, destDir, prefix + "-cfg", a.getCfgNodeLabels());
             }
             if (a.getDataDependencyGraph() != null) {
-                saveOnlyPng(a.getDataDependencyGraph(), tmpDir, destDir, prefix + "-ddg");
+                saveOnlyPng(a.getDataDependencyGraph(), tmpDir, destDir, prefix + "-ddg", a.getDdgNodeLabels());
             }
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Graphviz işlemi kesildi", e);
@@ -141,14 +143,53 @@ public class Exam {
     private void saveOnlyPng(Graph.Graph g,
                              Path tmpDir,
                              Path destDir,
-                             String baseName) throws IOException, InterruptedException {
-        g.saveGraphviz(tmpDir.toString(), baseName, baseName); // DOT + PNG tmp'te
+                             String baseName,
+                             Map<String,String> nodeLabelMap) throws IOException, InterruptedException {
+
+        // DOT dosyasını oluştur
+        g.saveGraphviz(tmpDir.toString(), baseName, baseName, nodeLabelMap);
+
+        Path dotFile = tmpDir.resolve(baseName + ".dot");
+        Path pngFile = tmpDir.resolve(baseName + ".png");
+
+        if (!Files.exists(dotFile)) {
+            throw new IOException("DOT file not created: " + dotFile);
+        }
+
+        // Graphviz dot komutu
+        String dotExe = "dot"; // Windows'ta PATH'te olmalı
+        ProcessBuilder pb = new ProcessBuilder(dotExe, "-Tpng",
+                dotFile.toAbsolutePath().toString(),
+                "-o", pngFile.toAbsolutePath().toString());
+
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+
+        // hata mesajlarını oku
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(p.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.err.println("[Graphviz] " + line);
+            }
+        }
+
+        int exitCode = p.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("Graphviz dot komutu başarısız oldu: exit=" + exitCode);
+        }
+
+        if (!Files.exists(pngFile)) {
+            throw new IOException("PNG file not created: " + pngFile);
+        }
+
         Files.createDirectories(destDir);
-        Files.move(tmpDir.resolve(baseName + ".png"),
-                destDir.resolve(baseName + ".png"),
-                StandardCopyOption.REPLACE_EXISTING);
-        // DOT tmp'te kalır; tmp klasörü en sonda siliniyor.
+        Files.move(pngFile, destDir.resolve(baseName + ".png"), StandardCopyOption.REPLACE_EXISTING);
+
+        System.out.println("DOT dosyası yazıldı: " + dotFile);
+        System.out.println("PNG dosyası yazıldı: " + destDir.resolve(baseName + ".png"));
     }
+
 
     private static void deleteDirectoryRecursive(Path dir) throws IOException {
         if (!Files.exists(dir)) return;

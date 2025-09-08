@@ -17,6 +17,10 @@ public class Assessment {
     private Graph controlFlowGraph;
     private Graph dataDependencyGraph;
 
+    private Map<String, String> astNodeLabels = new HashMap<>();
+    private Map<String, String> cfgNodeLabels = new HashMap<>();
+    private Map<String, String> ddgNodeLabels = new HashMap<>();
+
     private boolean astFailed = false;
     private boolean cfgFailed = false;
     private boolean ddgFailed = false;
@@ -25,7 +29,17 @@ public class Assessment {
     public boolean isCfgFailed() { return cfgFailed; }
     public boolean isDdgFailed() { return ddgFailed; }
 
+    public Map<String, String> getAstNodeLabels() {
+        return astNodeLabels;
+    }
 
+    public Map<String, String> getCfgNodeLabels() {
+        return cfgNodeLabels;
+    }
+
+    public Map<String, String> getDdgNodeLabels() {
+        return ddgNodeLabels;
+    }
 
     public Assessment(int grade, String feedback, boolean violation, String violationString, String codeBlock) {
         this.grade    = grade;
@@ -184,25 +198,44 @@ public class Assessment {
     }
 
 
-    private static String constructAST(String parent, Graph graph, String line, int j, LineType lineType) {
-        String fullLine = line + "-" + j;
-        String body = fullLine;
-        String condition;
+    private String constructAST(String parent,
+                                Graph graph,
+                                String line,
+                                int lineNumber,
+                                LineType lineType,
+                                Map<String, String> nodeLabels) {
+
+        String fullLine = line.trim();
+        String nodeId = lineType + "-" + lineNumber;
+        graph.put(parent, nodeId);
+        nodeLabels.put(nodeId, fullLine);
+
         if (lineType.equals(LineType.IF) || lineType.equals(LineType.ELSE_IF)) {
-            condition = line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")) + "-" + j;
-            graph.put(parent, condition);
-            graph.put(parent, fullLine);
+            String condContent = line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")).trim();
+            String condId = "cond-" + lineNumber;
+            graph.put(nodeId, condId);
+            nodeLabels.put(condId, condContent);
+            return condId;
+
         } else if (lineType.equals(LineType.ELSE)) {
-            graph.put(parent, fullLine);
+            return nodeId;
+
         } else if (lineType.equals(LineType.WHILE) || lineType.equals(LineType.FOR)) {
-            condition = line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")) + "-" + j;
-            graph.put(parent, fullLine);
-            graph.put(fullLine, condition);
-            body += "-branch";
-            graph.put(fullLine, body);
+            String condContent = line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")).trim();
+            String condId = "cond-" + lineNumber;
+            graph.put(nodeId, condId);
+            nodeLabels.put(condId, condContent);
+
+            String bodyId = "body-" + lineNumber;
+            graph.put(nodeId, bodyId);
+            nodeLabels.put(bodyId, "body");
+            return bodyId;
         }
-        return body;
+
+        return nodeId;
     }
+
+
 
     private static boolean conditionAST(int j, ArrayList<Pair<Integer, LineType>> lines) {
         if (lines.get(j).getValue().equals(LineType.CLOSE)) {
@@ -211,8 +244,24 @@ public class Assessment {
         return true;
     }
 
-    private static int solveAST(int j, ArrayList<Pair<Integer, LineType>> lines, Graph graph, String parent, HashMap<Integer, String> map) {
-        String body = constructAST(parent, graph, map.get(lines.get(j).getKey()), j, lines.get(j).getValue());
+    private int solveAST(int j,
+                         ArrayList<Pair<Integer, LineType>> lines,
+                         Graph graph,
+                         String parent,
+                         HashMap<Integer, String> map) {
+
+        int lineNumber = lines.get(j).getKey();
+        LineType type = lines.get(j).getValue();
+
+        String body = constructAST(
+                parent,
+                graph,
+                map.get(lineNumber),   // satır içeriği
+                lineNumber,
+                type,
+                astNodeLabels
+        );
+
         j++;
         while (j < lines.size() && conditionAST(j, lines)) {
             if (lines.get(j).getValue().equals(LineType.CLOSE)) {
@@ -221,9 +270,13 @@ public class Assessment {
             }
             LineType cur = lines.get(j).getValue();
             if (cur.equals(LineType.STATEMENT)) {
-                graph.put(body, cur + "-" + lines.get(j).getKey());
+                int stmtLine = lines.get(j).getKey();
+                String nodeId = cur + "-" + stmtLine;
+                graph.put(body, nodeId);
+                astNodeLabels.put(nodeId, map.get(stmtLine).trim());
                 j++;
-            } else if (cur.equals(LineType.ELSE) || cur.equals(LineType.ELSE_IF)) {
+            }
+            else if (cur.equals(LineType.ELSE) || cur.equals(LineType.ELSE_IF)) {
                 j = solveAST(j, lines, graph, parent, map);
             } else {
                 j = solveAST(j, lines, graph, body, map);
@@ -234,8 +287,10 @@ public class Assessment {
     }
 
 
+
     private void generateASTGraph() {
         Graph graph = new Graph();
+        astNodeLabels.clear();
         try {
             HashMap<Integer, String> lineMap = new HashMap<>();
             String[] lines = codeBlock.split("\n");
@@ -247,24 +302,28 @@ public class Assessment {
             if (block.isEmpty()) return;
 
             String parent = "start";
+            astNodeLabels.put(parent, "start");
+
             for (int j = 0; j < block.size(); j++) {
                 LineType type = block.get(j).getValue();
                 int lineNum = block.get(j).getKey();
 
                 if (type.equals(LineType.STATEMENT)) {
-                    String line = lineMap.get(lineNum);
-                    graph.put(parent, LineType.STATEMENT + "-" + lineNum);
+                    String nodeId = LineType.STATEMENT + "-" + lineNum;
+                    graph.put(parent, nodeId);
+                    astNodeLabels.put(nodeId, lineMap.get(lineNum).trim());
                 } else {
                     j = solveAST(j, block, graph, parent, lineMap);
                 }
             }
         } catch (Exception e) {
             astFailed = true;
-            System.err.println( "not done." );
+            System.err.println("Cannot generate AST: " + e.getMessage());
         }
 
         this.abstractSyntaxTree = graph;
     }
+
 
 
     /**
@@ -500,7 +559,7 @@ public class Assessment {
         ArrayList<Pair<Integer, LineType>> singleBlock = convertFromCodeBlock(codeBlock);
 
         if (!singleBlock.isEmpty()) {
-            result.add(singleBlock);  // Beklenen format: Liste içinde tek blok
+            result.add(singleBlock);
         }
 
         return result;
@@ -686,12 +745,18 @@ public class Assessment {
     }
 
 
-    private static String ifStatement(String prev, Graph graph, ArrayList<Pair<Integer, LineType>> lines) {
+    private static String ifStatement(
+            String prev,
+            Graph graph,
+            ArrayList<Pair<Integer, LineType>> lines,
+            Map<String,String> nodeLabels,
+            HashMap<Integer,String> lineMap
+    ) {
         String first = prev;
         ArrayList<String> lasts = new ArrayList<>();
         boolean hasElse = false;
 
-        while (condition(lines, lasts, prev)) {
+        while (!lines.isEmpty() && condition(lines, lasts, prev)) {
             if (lines.get(0).getValue().equals(LineType.CLOSE)) {
                 prev = first;
                 lines.remove(0);
@@ -702,11 +767,11 @@ public class Assessment {
             }
 
             if (!lines.isEmpty() && !lines.get(0).getValue().equals(LineType.CLOSE)) {
-                prev = addNode(prev, graph, lines);
+                prev = addNode(prev, graph, lines, nodeLabels, lineMap);
             }
         }
 
-        if (!lines.isEmpty()) lines.remove(0); // Remove closing brace
+        if (!lines.isEmpty()) lines.remove(0); // kapanış parantezini at
 
         String end = "end-" + first;
         for (String last : lasts) {
@@ -719,69 +784,127 @@ public class Assessment {
         return end;
     }
 
-    private static String forStatement(String prev, Graph graph, ArrayList<Pair<Integer, LineType>> lines) {
+    private static String forStatement(
+            String prev,
+            Graph graph,
+            ArrayList<Pair<Integer, LineType>> lines,
+            Map<String,String> nodeLabels,
+            HashMap<Integer,String> lineMap
+    ) {
         String first = prev;
-        while (!lines.get(0).getValue().equals(LineType.CLOSE)) {
-            prev = addNode(prev, graph, lines);
+        while (!lines.isEmpty() && !lines.get(0).getValue().equals(LineType.CLOSE)) {
+            prev = addNode(prev, graph, lines, nodeLabels, lineMap);
         }
-        lines.remove(0);
+        if (!lines.isEmpty()) {
+            lines.remove(0);
+        }
         graph.put(prev, first);
+
+
+        try {
+            int lineNo = Integer.parseInt(first.split("-")[1]);
+            nodeLabels.put(first, lineMap.get(lineNo).trim());
+        } catch (Exception ignored) {}
+
         return prev;
     }
 
-    private static String whileStatement(String prev, Graph graph, ArrayList<Pair<Integer, LineType>> lines) {
+    private static String whileStatement(
+            String prev,
+            Graph graph,
+            ArrayList<Pair<Integer, LineType>> lines,
+            Map<String,String> nodeLabels,
+            HashMap<Integer,String> lineMap
+    ) {
         String first = prev;
-        while (!lines.get(0).getValue().equals(LineType.CLOSE)) {
-            prev = addNode(prev, graph, lines);
+        while (!lines.isEmpty() && !lines.get(0).getValue().equals(LineType.CLOSE)) {
+            prev = addNode(prev, graph, lines, nodeLabels, lineMap);
         }
-        lines.remove(0);
+        if (!lines.isEmpty()) {
+            lines.remove(0);
+        }
         graph.put(prev, first);
+
+
+        try {
+            int lineNo = Integer.parseInt(first.split("-")[1]);
+            nodeLabels.put(first, lineMap.get(lineNo).trim());
+        } catch (Exception ignored) {}
+
         return first;
     }
 
-    private static String addNode(String prev, Graph graph, ArrayList<Pair<Integer, LineType>> lines) {
+
+    private static String addNode(
+            String prev,
+            Graph graph,
+            ArrayList<Pair<Integer, LineType>> lines,
+            Map<String,String> nodeLabels,
+            HashMap<Integer,String> lineMap
+    ) {
         Pair<Integer, LineType> pair = lines.remove(0);
         String cur;
+        int lineNo = pair.getKey();
+        String lineContent = lineMap.get(lineNo).trim();
 
         switch (pair.getValue()) {
             case IF:
-                cur = "if-" + pair.getKey();
+                cur = "if-" + lineNo;
                 graph.put(prev, cur);
-                return ifStatement(cur, graph, lines);
+                nodeLabels.put(cur, lineContent); // label = kod satırı
+                return ifStatement(cur, graph, lines, nodeLabels, lineMap);
+
             case STATEMENT:
-                cur = "statement-" + pair.getKey();
+                cur = "statement-" + lineNo;
                 graph.put(prev, cur);
+                nodeLabels.put(cur, lineContent); // label = kod satırı
                 return cur;
+
             case FOR:
-                cur = "for-" + pair.getKey();
+                cur = "for-" + lineNo;
                 graph.put(prev, cur);
-                return forStatement(cur, graph, lines);
+                nodeLabels.put(cur, lineContent);
+                return forStatement(cur, graph, lines, nodeLabels, lineMap);
+
             case WHILE:
-                cur = "while-" + pair.getKey();
+                cur = "while-" + lineNo;
                 graph.put(prev, cur);
-                return whileStatement(cur, graph, lines);
+                nodeLabels.put(cur, lineContent);
+                return whileStatement(cur, graph, lines, nodeLabels, lineMap);
+
             default:
                 return prev;
         }
     }
 
+
+
     // BU KISIM FARKLI - müjganın exam reader'ı, githubdaki son hali.
     private void generateCFGGraph() {
         Graph graph = new Graph();
+        cfgNodeLabels.clear();
         try {
             ArrayList<Pair<Integer, LineType>> block = convertFromCodeBlock(codeBlock);
+
+            HashMap<Integer, String> lineMap = new HashMap<>();
+            String[] lines = codeBlock.split("\n");
+            for (int i = 0; i < lines.length; i++) {
+                lineMap.put(i + 1, lines[i]);
+            }
+
             String prev = "start-0";
+            cfgNodeLabels.put(prev, "start");
+
             while (!block.isEmpty()) {
-                prev = addNode(prev, graph, block);
+                prev = addNode(prev, graph, block, cfgNodeLabels, lineMap);
             }
             this.controlFlowGraph = graph;
         } catch (Exception e) {
             cfgFailed = true;
-            this.controlFlowGraph = new Graph(); // emniyet
+            this.controlFlowGraph = new Graph();
             System.err.println("Cannot generate CFG: " + e.getMessage());
         }
     }
-
 
 
     private Set<Pair<Integer, String>> getWrittenVars(String line, int lineNumber) {
@@ -954,6 +1077,7 @@ public class Assessment {
     //BU KISIM FARKLI
     //Bu methodda bazı farklılıklar var. teknik değil ama kod okunabilirliği açısından.
     private void generateDDGGraph() {
+        ddgNodeLabels.clear();
         try {
             Graph graph = new Graph();
             Map<String, List<Integer>> writeMap = new HashMap<>();
@@ -969,27 +1093,25 @@ public class Assessment {
                 Set<Pair<Integer, String>> writtenVars = getWrittenVars(line, lineNumber);
                 Set<Pair<Integer, String>> readVars = getReadVars(line, lineNumber);
 
-                // Yazılan değişkenleri writeMap'e ekle
-                // BU KISIM FARKLI - mğjgan exam reader'ı - bu hali daha doğru görünüyor.
+                // yazılan değişkenler
                 for (Pair<Integer, String> pair : writtenVars) {
                     String variable = pair.getValue();
                     int writeLine = pair.getKey();
 
-                    // Eğer bu değişken daha önce eklenmemişse liste oluştur
                     if (!writeMap.containsKey(variable)) {
                         writeMap.put(variable, new ArrayList<>());
                     }
-
-                    // Bu satırı write listesine ekle
                     writeMap.get(variable).add(writeLine);
+
+                    String nodeId = "Line " + writeLine + " (" + variable + ")";
+                    ddgNodeLabels.put(nodeId, line);  // buraya satırın tamamını koyuyoruz
                 }
 
-                // Okunan değişkenler için: önceki en yakın write’la bağlantı ekle
+                // okunan değişkenler
                 for (Pair<Integer, String> pair : readVars) {
                     String variable = pair.getValue();
                     int readLine = pair.getKey();
 
-                    // Yazılmış satırlar varsa, sadece readLine'dan küçük olanlar dikkate alınmalı
                     if (writeMap.containsKey(variable)) {
                         List<Integer> writtenLines = writeMap.get(variable);
                         Integer lastWrite = null;
@@ -1001,11 +1123,12 @@ public class Assessment {
                             }
                         }
 
-                        // En yakın önceki write bulunduysa grafiğe edge ekle
                         if (lastWrite != null) {
                             String from = "Line " + lastWrite + " (" + variable + ")";
                             String to = "Line " + readLine + " (" + variable + ")";
                             graph.put(from, to);
+
+                            ddgNodeLabels.put(to, line); // okunan satırın tamamı
                         }
                     }
                 }
@@ -1013,10 +1136,11 @@ public class Assessment {
             this.dataDependencyGraph = graph;
         } catch (Exception e) {
             ddgFailed = true;
-            this.dataDependencyGraph = new Graph(); // emniyet
+            this.dataDependencyGraph = new Graph();
             System.err.println("Cannot generate DDG: " + e.getMessage());
         }
     }
+
 
 
 
@@ -1039,21 +1163,19 @@ public class Assessment {
     public void toGraphviz(String directory) {
         try {
             if (abstractSyntaxTree != null) {
-                abstractSyntaxTree.saveGraphviz(directory, "ast", "AST");
+                abstractSyntaxTree.saveGraphviz(directory, "ast", "AST", astNodeLabels);
             }
             if (controlFlowGraph != null) {
-                controlFlowGraph.saveGraphviz(directory, "cfg", "CFG");
+                controlFlowGraph.saveGraphviz(directory, "cfg", "CFG", cfgNodeLabels);
             }
             if (dataDependencyGraph != null) {
-                dataDependencyGraph.saveGraphviz(directory, "ddg", "DDG");
+                dataDependencyGraph.saveGraphviz(directory, "ddg", "DDG", ddgNodeLabels);
             }
             System.out.println("Graphviz çıktıları kaydedildi: " + directory);
         } catch (Exception e) {
             System.err.println("Graphviz çıktısı alınırken hata: " + e.getMessage());
         }
     }
-
-
 
 
 

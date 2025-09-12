@@ -75,17 +75,18 @@ public class Exam {
         String typeSuffix = (examTypeLetter != null && !examTypeLetter.isBlank()) ? examTypeLetter : "";
 
         for (Question q : this.questions) {
-
-            // --------- REF CODE ---------
+            // --------- HER REF CODE İÇİN ---------
             for (RefCode ref : q.getRefcodes()) {
                 ArrayList<Assessment> refAssess = ref.getAssessments();
+                int refId = ref.getRefCodeNo();
+
                 for (int i = 0; i < refAssess.size(); i++) {
                     Assessment a = refAssess.get(i);
                     int refScore = a.getGrade();
 
                     String caseFolderName = sanitize(
-                            String.format("%s, Question %s, A%d%s",
-                                    this.examName, q.getQuestionNo(), i + 1, typeSuffix)
+                            String.format("%s, Question %s, RefCode%d, A%d%s",
+                                    this.examName, q.getQuestionNo(), refId, i + 1, typeSuffix)
                     );
 
                     Path caseDir = gradingRoot
@@ -94,14 +95,17 @@ public class Exam {
 
                     Files.createDirectories(caseDir);
 
-                    // Ref PNG'leri caseDir'in köküne
-                    renderAssessmentPNGsTo(caseDir, a, "ref");
 
-                    // --------- ÖĞRENCİLER ---------
+                    renderAssessmentPNGsTo(caseDir, a, "ref" + refId);
+
+                    // --------- O REF CODE’A AİT ÖĞRENCİLER ---------
                     for (StudentCode st : q.getStudents()) {
                         if (st.isSkip()) continue;
 
-                        // Öğrencinin aynı indexteki assessment'ı varsa al
+                        // Öğrencinin refCodeNo’su aynı değilse geç
+                        if (st.getRefCodeNo() != refId) continue;
+
+                        // Öğrencinin aynı indexte assessment'ı varsa
                         if (i < st.getAssessments().size()) {
                             Assessment sa = st.getAssessments().get(i);
                             int stuScore = sa.getGrade();
@@ -116,6 +120,7 @@ public class Exam {
             }
         }
     }
+
 
 // --- yardımcılar ---
 

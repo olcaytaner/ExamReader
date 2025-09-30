@@ -143,62 +143,99 @@ public class Assessment {
 
     public static ArrayList<String> extractTokensWithDots(String line) {
         ArrayList<String> tokens = new ArrayList<>();
-        boolean dot = false;
         int i = 0;
+
         while (i < line.length()) {
             char c = line.charAt(i);
 
-            if (Character.isLetter(c)) {
-                StringBuilder sb = new StringBuilder();
+            // identifier veya _ ile başlayanları yakala
+            if (Character.isLetter(c) || c == '_') {
+                // 1) temel identifier
+                StringBuilder ident = new StringBuilder();
                 while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
-                    sb.append(line.charAt(i));
+                    ident.append(line.charAt(i));
                     i++;
                 }
-                tokens.add(sb.toString());
+                String base = ident.toString();
+                tokens.add(base);
 
-                if (i < line.length() && line.charAt(i) == '.') {
-                    i++;
-                    StringBuilder full = new StringBuilder(sb);
-                    full.append('.');
+                // 2) full token: [ ... ] ve .segment zincirlerini ekle
+                StringBuilder full = new StringBuilder(base);
+                boolean extended = false;
+                boolean keepGoing = true;
 
-                    StringBuilder seg = new StringBuilder();
-                    while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
-                        full.append(line.charAt(i));
-                        seg.append(line.charAt(i));
+                while (keepGoing && i < line.length()) {
+                    char ch = line.charAt(i);
+
+                    if (ch == '[') {
+                        extended = true;
+                        // köşeli parantezli index(ler)i olduğu gibi full'e ekle (basit dengeleme ile)
+                        int depth = 0;
+                        do {
+                            char cc = line.charAt(i);
+                            full.append(cc);
+                            if (cc == '[') depth++;
+                            else if (cc == ']') depth--;
+                            i++;
+                            if (i >= line.length()) break;
+                        } while (depth > 0);
+                    } else if (ch == '.') {
+                        extended = true;
+                        full.append(ch);
                         i++;
+                        // nokta sonrası boşlukları at
+                        while (i < line.length() && Character.isWhitespace(line.charAt(i))) i++;
+                        // nokta sonrası yeni identifier bekliyoruz
+                        StringBuilder seg = new StringBuilder();
+                        while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
+                            char cc = line.charAt(i);
+                            full.append(cc);
+                            seg.append(cc);
+                            i++;
+                        }
+                        // seg yoksa zincir bitmiş say
+                        if (seg.length() == 0) keepGoing = false;
+                    } else {
+                        keepGoing = false;
                     }
+                }
+
+                if (extended) {
                     tokens.add(full.toString());
                 }
+                continue;
             }
 
-            else if (Character.isDigit(c)) {
+            if (Character.isDigit(c)) {
                 StringBuilder sb = new StringBuilder();
                 while (i < line.length() && Character.isDigit(line.charAt(i))) {
                     sb.append(line.charAt(i));
                     i++;
                 }
                 tokens.add(sb.toString());
-            }else if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') {
-                tokens.add(String.valueOf(c));
-                i++;
+                continue;
             }
 
-            else if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
+            if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') {
+                tokens.add(String.valueOf(c));
+                i++;
+                continue;
+            }
+
+            if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
                 StringBuilder sb = new StringBuilder();
-                while (i < line.length() && "=+-*/%<>!&|;,".indexOf(line.charAt(i)) >= 0 ){
+                while (i < line.length() && "=+-*/%<>!&|;,".indexOf(line.charAt(i)) >= 0) {
                     sb.append(line.charAt(i));
                     i++;
                 }
                 tokens.add(sb.toString());
+                continue;
             }
 
-            else {
-                i++;
-            }
+            i++;
         }
         return tokens;
     }
-
 
     private String constructAST(String parent,
                                 Graph graph,

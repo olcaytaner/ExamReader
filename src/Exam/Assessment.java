@@ -1246,157 +1246,191 @@ public class Assessment {
         return allVariables;
     }
 
-    public double calculateBestMatch(Assessment other) {
-        // İki assessment arasında en iyi eşleşme oranını bulur
-        // Farklı değişken isimleri kullanılsa bile aynı algoritmayı tanımak istiyoruz
-        Set<String> studentVars = this.getAllVariables();    // Bu assessment'ın değişkenlerini al [x, y, result]
-        Set<String> refVars = other.getAllVariables();       // Diğer assessment'ın değişkenlerini al [a, b, sum]
 
-        // Eğer değişken yoksa eşleştirme anlamsız
-        if (studentVars.isEmpty() || refVars.isEmpty()) {
-            return compareDirectly(other);  // Değişken yoksa sadece kod yapısına bakabiliriz
+    public static class MatchResult {
+        public Map<String, String> mapping;
+        public List<Pair<Integer, Integer>> matchedLines;
+
+        // Sadece eşleşen satırlar için constructor
+        public MatchResult(List<Pair<Integer, Integer>> matchedLines) {
+            this.mapping = Collections.emptyMap();
+            this.matchedLines = matchedLines;
         }
 
-        double bestMatch = 0.0;                              // Birçok deneme arasından en iyisini seçmemiz lazım
+        // Mapping ile birlikte eşleşen satırlar için constructor
+        public MatchResult(Map<String, String> mapping, List<Pair<Integer, Integer>> matchedLines) {
+            this.mapping = mapping;
+            this.matchedLines = matchedLines;
+        }
+    }
 
-        // Tüm mümkün eşleştirmeleri sistematik olarak dene
-        List<String> studentVarList = new ArrayList<>(studentVars);  // Set'i List'e çevir index erişimi için
-        List<String> refVarList = new ArrayList<>(refVars);          // Set'i List'e çevir index erişimi için
 
-        // Her öğrenci değişkeni için tüm referans değişkenleri dene
-        List<Map<String, String>> allMappings = generateAllMappings(studentVarList, refVarList);
+    // Sadece eşleştirme sonuçlarını hesapla skor hesaplama yok
+    public MatchResult calculateBestMatch(Assessment other) {
+        // Bu assessment'ın kodundaki tüm değişkenleri çıkar (örn: x, y, result)
+        Set<String> studentVars = getAllVariables();
+        Set<String> refVars = other.getAllVariables();
+
+        // Bu assessment'ın kodunu satır satır ayır (her satır bir dizi elemanı olacak)
+        String[] studentLines = codeBlock.split("\n");
+        String[] refLines = other.codeBlock.split("\n");
+
+    /*
+    public MatchResult calculateBestMatch(Assessment other) {
+    Set<String> studentVarsSet = getAllVariables();
+    Set<String> refVarsSet = other.getAllVariables();
+
+    List<String> studentVars = new ArrayList<>(studentVarsSet);
+    List<String> refVars = new ArrayList<>(refVarsSet);
+
+    String[] studentLines = codeBlock.split("\n");
+    String[] refLines = other.codeBlock.split("\n");
+
+    // Sıralı eşleştirme
+    Map<String, String> mapping = new HashMap<>();
+    int minLen = Math.min(studentVars.size(), refVars.size());
+    for (int i = 0; i < minLen; i++) {
+        mapping.put(studentVars.get(i), refVars.get(i));
+    }
+
+    List<Pair<Integer, Integer>> matches = compareLines(studentLines, refLines, mapping);
+    return new MatchResult(mapping, matches);
+    }
+    --recursive kaldırıp O(n) karmaşıklığa düşürebiliriz.
+    */
+
+        // Eğer herhangi bir kodda hiç değişken yoksa değişken eşleştirmesi yapma
+        if (studentVars.isEmpty() || refVars.isEmpty()) {
+            List<Pair<Integer, Integer>> matches = compareLines(studentLines, refLines, Collections.emptyMap());
+            return new MatchResult(Collections.emptyMap(), matches);
+        }
+
+        int bestMatchCount = 0;
+        Map<String, String> bestMapping = Collections.emptyMap();  // En iyi sonucu veren değişken eşleştirmesi
+        List<Pair<Integer, Integer>> bestMatches = new ArrayList<>();  // En iyi sonuçtaki eşleşen satır çiftleri
+
+        // Tüm olası değişken eşleştirmeleri  (x->a,y->b,result->sum veya x->b,y->a,result->sum)
+        List<Map<String, String>> allMappings = new ArrayList<>();
+        generateMappingsRecursive(new ArrayList<>(studentVars), new ArrayList<>(refVars), 0, new HashMap<>(), allMappings);
+
 
         for (Map<String, String> mapping : allMappings) {
-            double match = calculateMatch(other, mapping);           // Her eşleştirmeyi test et
-            if (match > bestMatch) {                                // En iyi skoru takip et
-                bestMatch = match;
-            }
-            // Erken çıkış: Perfect match bulursak devam etmeye gerek yok
-            if (bestMatch >= 1.0) {  // %100 eşleşme bulunca dur
-                break;
+            // Bu mapping ile satırları karşılaştır (öğrenci kodundaki değişkenleri mapping'e göre değiştirerek)
+            List<Pair<Integer, Integer>> matches = compareLines(studentLines, refLines, mapping);
+
+            // Bu mapping ile daha fazla satır eşleştiyse, bunu en iyi sonuç olarak kaydet
+            if (matches.size() > bestMatchCount) {
+                bestMatchCount = matches.size();  // Yeni en iyi eşleşme sayısı
+                bestMapping = new HashMap<>(mapping);  // Bu mapping'in kopyasını sakla
+                bestMatches = new ArrayList<>(matches);  // Bu eşleşmelerin kopyasını sakla
             }
         }
-
-        return bestMatch;
+        // En iyi mapping ve onunla bulunan eşleşmeleri döndür
+        return new MatchResult(bestMapping, bestMatches);
     }
 
-    public double[] findBestMatch(RefCode refCode) {
-        // Bu assessment'ı RefCode'daki tüm assessment'larla karşılaştır
-        // Hangi referans assessment'la en çok benziyor bulmak istiyoruz
-        double bestMatch = 0.0;
-        int bestIndex = -1;
+    // İki kod bloğunun satırlarını karşılaştırarak eşleşenler
+    private List<Pair<Integer, Integer>> compareLines(String[] studentLines, String[] refLines, Map<String, String> mapping) {
 
-        // En uygun olanını bulmak için hepsini denemek gerekiyor
+        List<Pair<Integer, Integer>> matches = new ArrayList<>();
+        // Kısa olan kodun uzunluğunu al (fazla satırlar zaten karşılaştırılamaz)
+        int minLen = Math.min(studentLines.length, refLines.length);
+
+        // Her satırı sırayla karşılaştır (0-based index ile)
+        for (int i = 0; i < minLen; i++) {
+            // Satır başı/sonu boşluklarını temizle
+            String studentLine = studentLines[i].trim();
+            String refLine = refLines[i].trim();
+
+            // Satır sadece yapısal karakterlerden oluşuyorsa atla
+            if (studentLine.replaceAll("[\\s{}();,]", "").isEmpty() || refLine.replaceAll("[\\s{}();,]", "").isEmpty()) {
+                continue;  // Bu satırı atla (örn: "{", "}", ";")
+            }
+
+            // Eğer değişken mapping'i varsa öğrenci satırındaki değişkenleri dönüştür
+            String processedStudentLine = mapping.isEmpty() ? studentLine : applyMapping(studentLine, mapping);
+
+            String sLine = processedStudentLine.replaceAll("\\s+", " ").trim();
+            String rLine = refLine.replaceAll("\\s+", " ").trim();
+            if (sLine.equals(rLine)) {
+                matches.add(new Pair<>(i + 1, i + 1));  // i+1 çünkü satır numaraları 1'den başlar
+            }
+        }
+        return matches;  // Bulunan tüm eşleşmeleri döndür
+    }
+
+    public int findBestMatch(RefCode refCode) {
+
+        int bestMatchCount = 0;  // Şu ana kadar bulunan en fazla eşleşen satır sayısı
+        int bestIndex = -1;      // En iyi eşleşen assessment'ın index'i (-1 = hiç eşleşme yok)
+
+
         for (int i = 0; i < refCode.getAssessments().size(); i++) {
-            Assessment refAssessment = refCode.getAssessments().get(i);          // Sırayla her assessment'ı al
-            double match = this.calculateBestMatch(refAssessment);
 
-            if (match > bestMatch) {                                            // Sürekli en iyi matchi güncellemeliyiz
-                bestMatch = match;
-                bestIndex = i;
+            Assessment refAssessment = refCode.getAssessments().get(i);
+            // Bu öğrenci assessment'ı ile i. referans assessment'ı arasında en iyi eşleşmeyi bul
+            MatchResult result = this.calculateBestMatch(refAssessment);
+
+            int matchCount = result.matchedLines.size();
+
+            // Bu assessment ile daha fazla satır eşleştiyse, bunu yeni en iyi sonuç olarak kaydet
+            if (matchCount > bestMatchCount) {
+                bestMatchCount = matchCount;  // Yeni rekor eşleşme sayısı
+                bestIndex = i;               // Bu assessment'ın index'i
             }
         }
 
-        return new double[]{bestMatch, bestIndex};  // (skor + index) döndürüyoruz
+        return bestIndex;
     }
 
 
-    private List<Map<String, String>> generateAllMappings(List<String> studentVars, List<String> refVars) {
-        // Tüm mümkün eşleştirmeleri sistematik olarak üret
-        // Her öğrenci değişkeni için her referans değişkenini dene
-        List<Map<String, String>> allMappings = new ArrayList<>();
-
-        if (studentVars.isEmpty() || refVars.isEmpty()) {
-            return allMappings;  // Boş liste döndür
-        }
-
-        // Recursive olarak tüm kombinasyonları üret
-        generateMappingsRecursive(studentVars, refVars, 0, new HashMap<>(), allMappings);
-
-        return allMappings;
-    }
-
-    private void generateMappingsRecursive(List<String> studentVars, List<String> refVars,
-                                           int index, Map<String, String> currentMapping,
-                                           List<Map<String, String>> allMappings) {
-        // Tüm öğrenci değişkenleri eşleştirildiyse
+    private void generateMappingsRecursive(List<String> studentVars, List<String> refVars, int index, Map<String, String> currentMapping, List<Map<String, String>> allMappings) {
+        // Base case: Tüm öğrenci değişkenleri eşleştirildiyse
         if (index == studentVars.size()) {
-            allMappings.add(new HashMap<>(currentMapping));  // Kopyasını ekle
-            return;
+            // Bu mapping'i sonuç listesine ekle (kopyasını al çünkü currentMapping değişecek)
+            allMappings.add(new HashMap<>(currentMapping));
+            return;  // Bu dal tamamlandı, geri dön
         }
 
-        // Mevcut öğrenci değişkeni için tüm referans değişkenleri dene
+        // Recursive case: Mevcut index'teki öğrenci değişkeni için tüm olası referans değişkenlerini dene
         String currentStudentVar = studentVars.get(index);
+
+        // Her referans değişkeni için dene O(n!) karmaşıklık
         for (String refVar : refVars) {
-            currentMapping.put(currentStudentVar, refVar);           // Eşleştirme ekle
-            generateMappingsRecursive(studentVars, refVars, index + 1, currentMapping, allMappings);  // Recursive çağrı
-            currentMapping.remove(currentStudentVar);               // eşleştirmeyi geri al
+            if (currentMapping.containsValue(refVar)) {
+                continue;  // Bu referans değişkeni zaten kullanılmış, sonrakini dene
+            }
+
+            currentMapping.put(currentStudentVar, refVar);  // Eşleştirme ekle (örn: x -> a)
+
+            generateMappingsRecursive(studentVars, refVars, index + 1, currentMapping, allMappings);
+
+            // Backtrack: Bu eşleştirmeyi geri al ki diğer olasılıkları deneyebilelim
+            currentMapping.remove(currentStudentVar);
         }
     }
 
-    private double calculateMatch(Assessment other, Map<String, String> mapping) {
-        // Belirli bir eşleştirme ile iki assessment arasındaki benzerliği hesaplayacağız
-        // Her farklı eşleştirmenin ne kadar başarılı olduğunu ölçmek istiyoruz
+    private MatchResult calculateMatch(Assessment other, Map<String, String> mapping) {
+
         String[] studentLines = this.codeBlock.split("\n");
         String[] refLines = other.codeBlock.split("\n");
 
-        int matchCount = 0;
-        int totalLines = Math.max(studentLines.length, refLines.length);
+        // Verilen mapping ile satırları karşılaştır ve eşleşenleri bul
+        List<Pair<Integer, Integer>> matchedLines = compareLines(studentLines, refLines, mapping);
 
-        // IndexOutOfBounds hatasını önlemek
-        for (int i = 0; i < Math.min(studentLines.length, refLines.length); i++) {
-            String studentLine = applyMapping(studentLines[i], mapping);
-            //Referans kod = Hedef
-            //Öğrenci kod = Hedefe ulaşmaya çalışan
-            //Hedefi değiştirmeyiz, hedefe gideni değiştireceğiz
-            //Kısaca: Referans kod dokunmayacak öğrenci kod ona uyum sağlayacak.
-            String refLine = refLines[i];
-
-            if (normalizeString(studentLine).equals(normalizeString(refLine))) { // Boşluk farklarını göz ardı etmek
-                matchCount++;                                               // Eşleşme skorunu hesaplamak için
-            }
-        }
-
-        return totalLines > 0 ? (double) matchCount / totalLines : 0.0;    // Oran hesaplama sebebi: 0-1 arası standart skor vermek
+        return new MatchResult(matchedLines);
     }
 
+    // Bir kod satırında değişken isimlerini verilen mapping'e göre değiştirir
     private String applyMapping(String line, Map<String, String> mapping) {
-        // Kod satırındaki değişkenleri eşleştirmeye göre değiştireceğiz
-        String result = line;                                   // Sonuç stringi
-        for (Map.Entry<String, String> entry : mapping.entrySet()) {  // Her eşleştirme için: x->a, y->b, result->sum
-            result = result.replaceAll("\\b" + Pattern.quote(entry.getKey()) + "\\b", entry.getValue());  // "int x = 5;" -> "int a = 5;"
-            // \\b: kelime sınırı (xTmp gibi değişkenlerde x'i değiştirmesin)
-            // Pattern.quote: özel karakterleri escape et
-        }
-        return result;  // Değiştirilmiş satırı döndür
-    }
+        String result = line;
 
-    private String normalizeString(String line) {
-        return line.trim().replaceAll("\\s+", " ");  // Başındaki/sonundaki boşlukları kaldır, çoklu boşlukları tek boşluğa çevir
-        // "  int   x  =   5;  " -> "int x = 5;"
-    }
-
-    private double compareDirectly(Assessment other) {
-        // Değişken eşleştirmesi olmadan direkt karşılaştır ! değişken yoksa kullanılcaz
-        String[] studentLines = this.codeBlock.split("\n");
-        String[] refLines = other.codeBlock.split("\n");
-
-        int matchCount = 0;                                     // Eşleşen satır sayısı
-        int totalLines = Math.max(studentLines.length, refLines.length);  // Toplam satır sayısı
-
-        // Her satırı normalize ederek karşılaştırıyoruz
-        for (int i = 0; i < Math.min(studentLines.length, refLines.length); i++) {
-            if (normalizeString(studentLines[i]).equals(normalizeString(refLines[i]))) {  // Satırlar birebir aynıysa
-                matchCount++;                                   // Eşleşen sayısını artır
-            }
+        for (Map.Entry<String, String> entry : mapping.entrySet()) {
+            // int x = 5; -> int a = 5; (x->a mapping ile)
+            result = result.replaceAll("\\b" + Pattern.quote(entry.getKey()) + "\\b", entry.getValue());
         }
 
-        return totalLines > 0 ? (double) matchCount / totalLines : 0.0;  // Eşleşme oranını döndür
-        // Eşleştirme: {x→a, y→b, result→sum}
-        //studentLines[0]: "int x = 5;"     → "int a = 5;"
-        //studentLines[1]: "int y = 10;"    → "int b = 10;"
-        //studentLines[2]: "int result = x + y;" → "int sum = a + b;"
+        return result;
     }
-
 
 }

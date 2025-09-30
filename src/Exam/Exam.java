@@ -69,6 +69,7 @@ public class Exam {
     }
 
     public void exportGradingPNGs(String gradingRootDir, String examTypeLetter) throws IOException {
+
         Path gradingRoot = Paths.get(gradingRootDir);
         Files.createDirectories(gradingRoot);
 

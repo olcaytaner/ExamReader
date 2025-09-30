@@ -68,9 +68,8 @@ public class CasePanel extends JPanel {
 
         JPanel leftPanel = new JPanel(new BorderLayout());
         leftPanel.add(refTitle, BorderLayout.NORTH);
-        // Left vertical split
         refSplit.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        refSplit.setResizeWeight(0.55);             // grid starts larger on top
+        refSplit.setResizeWeight(0.55);
         refSplit.setContinuousLayout(true);
         leftPanel.add(refSplit, BorderLayout.CENTER);
 
@@ -102,9 +101,9 @@ public class CasePanel extends JPanel {
         rightPanel.add(scoresCard, "SCORES");
         rightPanel.add(imagesCard, "IMAGES");
 
-        // Main horizontal split (left refs / right content)
+        // Main horizontal split
         mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightPanel);
-        mainSplit.setResizeWeight(0.36);     // left side width ratio
+        mainSplit.setResizeWeight(0.36);
         mainSplit.setContinuousLayout(true);
         mainSplit.setBorder(null);
 
@@ -122,7 +121,6 @@ public class CasePanel extends JPanel {
         loadRefImages();
         loadScoreFolders();
 
-        // Initial layout
         showScoresCard();
         mainSplit.setDividerLocation(0.36);
         refSplit.setDividerLocation(0.55);
@@ -132,11 +130,24 @@ public class CasePanel extends JPanel {
 
     private void loadRefImages() {
         refGrid.removeAll();
-        addRefTile(caseDir.resolve("ref-ast.png").toFile(), "AST");
-        addRefTile(caseDir.resolve("ref-cfg.png").toFile(), "CFG");
-        addRefTile(caseDir.resolve("ref-ddg.png").toFile(), "DDG");
+        addRefTile(findRefFile("ast"), "AST");
+        addRefTile(findRefFile("cfg"), "CFG");
+        addRefTile(findRefFile("ddg"), "DDG");
         refGrid.revalidate();
         refGrid.repaint();
+    }
+
+    private File findRefFile(String type) {
+        File[] matches = caseDir.toFile().listFiles(f ->
+                f.isFile() &&
+                        f.getName().toLowerCase().endsWith(type + ".png") &&
+                        f.getName().toLowerCase().startsWith("ref")
+        );
+        if (matches != null && matches.length > 0) {
+            Arrays.sort(matches);
+            return matches[0]; // ilk bulunanı al
+        }
+        return caseDir.resolve("ref-" + type + ".png").toFile(); // fallback
     }
 
     private void addRefTile(File png, String label) {
@@ -144,8 +155,9 @@ public class CasePanel extends JPanel {
         tile.setToolTipText(png.getName());
         if (png.isFile()) {
             tile.addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                    showLeftImage(png);      // open in LEFT large preview within the same window
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
+                    showLeftImage(png);
                 }
             });
         } else {
@@ -156,7 +168,6 @@ public class CasePanel extends JPanel {
 
     private void showLeftImage(File imgFile) {
         setImageTo(refImageLabel, imgFile);
-        // the bottom panel stays visible; user can drag refSplit divider to resize
     }
 
     // ------------------ RIGHT: Folders / Students ------------------
@@ -169,8 +180,11 @@ public class CasePanel extends JPanel {
 
         Arrays.sort(dirs, Comparator
                 .comparingInt((File f) -> {
-                    try { return Integer.parseInt(f.getName().replaceAll("[^0-9]", "")); }
-                    catch (Exception e) { return Integer.MAX_VALUE; }
+                    try {
+                        return Integer.parseInt(f.getName().replaceAll("[^0-9]", ""));
+                    } catch (Exception e) {
+                        return Integer.MAX_VALUE;
+                    }
                 })
                 .thenComparing(File::getName, String.CASE_INSENSITIVE_ORDER));
 
@@ -178,7 +192,8 @@ public class CasePanel extends JPanel {
             JPanel tile = makeFolderTile(d.getName());
             tile.setToolTipText(d.getAbsolutePath());
             tile.addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent e) {
                     showImagesIn(d.toPath());
                 }
             });
@@ -209,8 +224,9 @@ public class CasePanel extends JPanel {
                 JPanel tile = makeTile(name, loadThumb(f, 240, 180));
                 tile.setToolTipText(f.getAbsolutePath());
                 tile.addMouseListener(new java.awt.event.MouseAdapter() {
-                    @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                        showRightImage(f);   // open in RIGHT large preview within the same window
+                    @Override
+                    public void mouseClicked(java.awt.event.MouseEvent e) {
+                        showRightImage(f);
                     }
                 });
                 imagesGrid.add(tile);
@@ -220,8 +236,6 @@ public class CasePanel extends JPanel {
         imagesGrid.revalidate();
         imagesGrid.repaint();
         rightCards.show(rightPanel, "IMAGES");
-
-        // When switching to the student card, start with the bottom preview panel visible
         imagesSplit.setDividerLocation(0.55);
     }
 
@@ -250,7 +264,6 @@ public class CasePanel extends JPanel {
             img.setHorizontalAlignment(SwingConstants.CENTER);
             panel.add(img, BorderLayout.CENTER);
         } else {
-            // placeholder for empty tile
             JLabel ph = new JLabel("", UIManager.getIcon("FileView.fileIcon"), SwingConstants.CENTER);
             ph.setVerticalTextPosition(SwingConstants.BOTTOM);
             ph.setHorizontalTextPosition(SwingConstants.CENTER);
@@ -283,7 +296,7 @@ public class CasePanel extends JPanel {
     private static void setImageTo(JLabel target, File imgFile) {
         try {
             BufferedImage img = ImageIO.read(imgFile);
-            target.setIcon(new ImageIcon(img)); // original size; scrollpane handles overflow
+            target.setIcon(new ImageIcon(img));
             target.setText("");
         } catch (Exception e) {
             target.setIcon(null);

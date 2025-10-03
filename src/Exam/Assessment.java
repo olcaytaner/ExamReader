@@ -1190,7 +1190,7 @@ public class Assessment {
             "import", "instanceof", "int", "interface", "long", "native", "new", "package",
             "private", "protected", "public", "return", "short", "static", "strictfp",
             "super", "switch", "synchronized", "this", "throw", "throws", "transient",
-            "try", "void", "volatile", "while", "null", "true", "false"
+            "try", "void", "volatile", "while", "null", "true", "false", "head", "tail", "pop", "push"
     );
 
 
@@ -1217,35 +1217,133 @@ public class Assessment {
     }
 
 
-    public Set<String> getAllVariables() {
-        // Assessment'taki tüm değişkenleri çıkarır
-        // Kod eşleştirmesi için hangi değişkenlerin mevcut olduğunu bilmemiz gerekiyor
-        Set<String> allVariables = new HashSet<>();  // Aynı değişken birden fazla satırda kullanılabilir, tekrarları istemeyiz
+    private static final Set<String> JAVA_TYPES = Set.of(
+            "boolean", "bool", "byte", "char",  "double", "float", "int", "long", "short", "LinkedList" ,"ArrayList",
+            "Stack", "Queue",  "DoublyList", "DoublyLinkedList", "Element", "Node", "DoublyNode", "Str"
+    );
 
-        String[] lines = codeBlock.split("\n");
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].trim();
-            int lineNumber = i + 1;
-
-            if (line.isEmpty() || line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) {
-                continue;
-            }
-
-            Set<Pair<Integer, String>> writtenVars = getWrittenVars(line, lineNumber);  // x = 5; gibi: x değişkeni yazılıyor
-            Set<Pair<Integer, String>> readVars = getReadVars(line, lineNumber);        // y = x + 3; gibi: x değişkeni okunuyor
-
-            // İki tip değişkeni de toplama sebebi: Hem yazılan hem okunan değişkenlerin hepsi önemli
-            for (Pair<Integer, String> pair : writtenVars) {
-                allVariables.add(pair.getValue());   // Pair'dan sadece değişken ismini istiyoruz, satır numarasını değil
-            }
-            for (Pair<Integer, String> pair : readVars) {
-                allVariables.add(pair.getValue());   // Aynı değişken hem yazılıp hem okunabilir, sadece bir kez saymak istiyoruz
-            }
-        }
-
-        return allVariables;
+    private boolean isTypeToken(String t) {
+        return t != null && JAVA_TYPES.contains(t);
     }
 
+    private void addIfAbsent(Map<String, Variable> vars, String name, String type) {
+        if (!vars.containsKey(name)) {
+            vars.put(name, new Variable(type, name));
+        }
+    }
+
+    public Set<Variable> getAllVariables() {
+        //değişkenleri map olarak tutuyoruz. (string kısmında değişkenin adı olucak tekrarı önlemek için
+        Map<String, Variable> vars = new LinkedHashMap<>();
+        String[] lines = codeBlock.split("\n");
+        boolean inBlockComment = false;
+
+        for (String raw : lines) {
+            String line = raw;
+
+            // Yorum satırı varsa bu kısımda temizliyoruz.
+            if (inBlockComment) {
+                int end = line.indexOf("*/");
+                if (end >= 0) {
+                    line = line.substring(end + 2);
+                    inBlockComment = false;
+                } else {
+                    continue;
+                }
+            }
+            int bs = line.indexOf("/*");
+            if (bs >= 0) {
+                int be = line.indexOf("*/", bs + 2);
+                if (be >= 0) {
+                    line = line.substring(0, bs) + line.substring(be + 2);
+                } else {
+                    line = line.substring(0, bs);
+                    inBlockComment = true;
+                }
+            }
+            int sl = line.indexOf("//");
+            if (sl >= 0) line = line.substring(0, sl);
+
+            line = line.trim();
+            if (line.isEmpty()) continue;
+
+            // DİĞER CASE'ler  (farklı şekilde tanımlanan variable'lar için)
+            // for(...) init kısmında tipli değişken )
+            // for (int k = 1; k <= d; ++k) gibi. buradaki k'yı alıyor.
+
+            if (line.contains("for(") || line.startsWith("for ")) {
+                int o = line.indexOf('(');          // iç kısmını alacağımız başlangıç noktası
+                int c = line.lastIndexOf(')');  // iç kısmını alacağımız bitiş noktası
+                if (o >= 0 && c > o) {
+                    String inside = line.substring(o + 1, c); // forun iç kısmı
+                    String[] parts = inside.split(";", -1); // forun içini bölüp arraya ekledik.
+                    String init = "";
+                    if (parts.length > 0) {
+                        init = parts[0].trim();
+                    }
+                    ArrayList<String> itok = extractTokensWithDots(init);
+                    // for each olan for döngüsü için
+                    if (init.contains(":") && itok.size() >= 2
+                            && isTypeToken(itok.get(0)) && isVariable(itok.get(1))) {
+                        addIfAbsent(vars, itok.get(1), itok.get(0));   // q : Queue
+                    }
+                    // normal for loop için olan for döngüsü için
+                    else if (itok.size() >= 3 && isTypeToken(itok.get(0))
+                            && isVariable(itok.get(1)) && "=".equals(itok.get(2))) {
+                        addIfAbsent(vars, itok.get(1), itok.get(0));   // k : int
+                    }
+                }
+            }
+
+            // Array tanımlama  T [ ] name = ...
+            ArrayList<String> tok = extractTokensWithDots(line);
+            if (    tok.size() >= 5
+                    && isTypeToken(tok.get(0))
+                    && "[".equals(tok.get(1))
+                    && "]".equals(tok.get(2))
+                    && isVariable(tok.get(3))
+                    && "=".equals(tok.get(4))) {
+                addIfAbsent(vars, tok.get(3), tok.get(0) + "[]");
+            }
+
+            // Pointer tanımlama  T * name = ...
+            if (tok.size() >= 4
+                    && isTypeToken(tok.get(0))
+                    && "*".equals(tok.get(1))
+                    && isVariable(tok.get(2))
+                    && "=".equals(tok.get(3))) {
+                addIfAbsent(vars, tok.get(2), tok.get(0) + "*");
+            }
+
+            //  Klasik tanımlama  T name = ...
+            if (tok.size() >= 3
+                    && isTypeToken(tok.get(0))
+                    && isVariable(tok.get(1))
+                    && "=".equals(tok.get(2))) {
+                addIfAbsent(vars, tok.get(1), tok.get(0));
+            }
+
+            // direkt tanımlama  T name ;
+            if (tok.size() >= 3
+                    && isTypeToken(tok.get(0))
+                    && isVariable(tok.get(1))
+                    && ";".equals(tok.get(2))) {
+                addIfAbsent(vars, tok.get(1), tok.get(0));
+            }
+
+            // (sadece extractTokensWithDots + isVariable ile handle edebildiklerimiz)
+            // - if/while/for koşullarındaki değişkenleri
+            // - this, null, true/false, left.data, arr[i] vb. olan tokenları otomatik eleyerek toplar
+            for (String t : tok) {
+                if (isVariable(t) && !isTypeToken(t)) {   // <-- type token'larını at
+                    addIfAbsent(vars, t, null);
+                }
+            }
+
+        }
+
+        return new LinkedHashSet<>(vars.values());
+    }
 
     public static class MatchResult {
         public Map<String, String> mapping;
@@ -1268,36 +1366,23 @@ public class Assessment {
     // Sadece eşleştirme sonuçlarını hesapla skor hesaplama yok
     public MatchResult calculateBestMatch(Assessment other) {
         // Bu assessment'ın kodundaki tüm değişkenleri çıkar (örn: x, y, result)
-        Set<String> studentVars = getAllVariables();
-        Set<String> refVars = other.getAllVariables();
+        Set<Variable> studentVarsSet = getAllVariables();
+        Set<Variable> refVarsSet = other.getAllVariables();
+
+        // Variable nesnelerinden isimleri çıkar
+        Set<String> studentVars = new HashSet<>();
+        for (Variable var : studentVarsSet) {
+            studentVars.add(var.getName());
+        }
+
+        Set<String> refVars = new HashSet<>();
+        for (Variable var : refVarsSet) {
+            refVars.add(var.getName());
+        }
 
         // Bu assessment'ın kodunu satır satır ayır (her satır bir dizi elemanı olacak)
         String[] studentLines = codeBlock.split("\n");
         String[] refLines = other.codeBlock.split("\n");
-
-    /*
-    public MatchResult calculateBestMatch(Assessment other) {
-    Set<String> studentVarsSet = getAllVariables();
-    Set<String> refVarsSet = other.getAllVariables();
-
-    List<String> studentVars = new ArrayList<>(studentVarsSet);
-    List<String> refVars = new ArrayList<>(refVarsSet);
-
-    String[] studentLines = codeBlock.split("\n");
-    String[] refLines = other.codeBlock.split("\n");
-
-    // Sıralı eşleştirme
-    Map<String, String> mapping = new HashMap<>();
-    int minLen = Math.min(studentVars.size(), refVars.size());
-    for (int i = 0; i < minLen; i++) {
-        mapping.put(studentVars.get(i), refVars.get(i));
-    }
-
-    List<Pair<Integer, Integer>> matches = compareLines(studentLines, refLines, mapping);
-    return new MatchResult(mapping, matches);
-    }
-    --recursive kaldırıp O(n) karmaşıklığa düşürebiliriz.
-    */
 
         // Eğer herhangi bir kodda hiç değişken yoksa değişken eşleştirmesi yapma
         if (studentVars.isEmpty() || refVars.isEmpty()) {
@@ -1309,9 +1394,9 @@ public class Assessment {
         Map<String, String> bestMapping = Collections.emptyMap();  // En iyi sonucu veren değişken eşleştirmesi
         List<Pair<Integer, Integer>> bestMatches = new ArrayList<>();  // En iyi sonuçtaki eşleşen satır çiftleri
 
-        // Tüm olası değişken eşleştirmeleri  (x->a,y->b,result->sum veya x->b,y->a,result->sum)
+        // Tüm olası değişken eşleştirmeleri (kısmi eşleştirmeler dahil)
         List<Map<String, String>> allMappings = new ArrayList<>();
-        generateMappingsRecursive(new ArrayList<>(studentVars), new ArrayList<>(refVars), 0, new HashMap<>(), allMappings);
+        generatePartialMappings(new ArrayList<>(studentVars), new ArrayList<>(refVars), allMappings);
 
 
         for (Map<String, String> mapping : allMappings) {
@@ -1333,27 +1418,103 @@ public class Assessment {
     private List<Pair<Integer, Integer>> compareLines(String[] studentLines, String[] refLines, Map<String, String> mapping) {
 
         List<Pair<Integer, Integer>> matches = new ArrayList<>();
-        // Kısa olan kodun uzunluğunu al (fazla satırlar zaten karşılaştırılamaz)
-        int minLen = Math.min(studentLines.length, refLines.length);
+        boolean[] usedReferenceLine = new boolean[refLines.length];
 
-        // Her satırı sırayla karşılaştır (0-based index ile)
-        for (int i = 0; i < minLen; i++) {
-            // Satır başı/sonu boşluklarını temizle
-            String studentLine = studentLines[i].trim();
-            String refLine = refLines[i].trim();
+        for (int studentLineIndex = 0; studentLineIndex < studentLines.length; studentLineIndex++) {
+            String rawStudentLine = studentLines[studentLineIndex].trim();
 
-            // Satır sadece yapısal karakterlerden oluşuyorsa atla
-            if (studentLine.replaceAll("[\\s{}();,]", "").isEmpty() || refLine.replaceAll("[\\s{}();,]", "").isEmpty()) {
-                continue;  // Bu satırı atla (örn: "{", "}", ";")
+            // Yapısal/boş satırları atla
+            if (rawStudentLine.replaceAll("[\\s{}();,]", "").isEmpty()) {
+                continue;
             }
 
-            // Eğer değişken mapping'i varsa öğrenci satırındaki değişkenleri dönüştür
-            String processedStudentLine = mapping.isEmpty() ? studentLine : applyMapping(studentLine, mapping);
+            // mapping uygula ve normalize et
+            String mappedStudentLine = mapping.isEmpty() ? rawStudentLine : applyMapping(rawStudentLine, mapping);
+            String normalizedStudentLine = mappedStudentLine.replaceAll("\\s+", " ").trim();
+            ArrayList<String> studentTokens = extractTokensWithDots(normalizedStudentLine);
+            boolean studentOnlyElseHeader = !studentTokens.contains("if") && studentTokens.stream().allMatch(t -> t.equals("{") || t.equals("}") || t.equals("else"));
+            if (studentOnlyElseHeader) {
+                continue; // sadece else başlığı olan satırları atla
+            }
 
-            String sLine = processedStudentLine.replaceAll("\\s+", " ").trim();
-            String rLine = refLine.replaceAll("\\s+", " ").trim();
-            if (sLine.equals(rLine)) {
-                matches.add(new Pair<>(i + 1, i + 1));  // i+1 çünkü satır numaraları 1'den başlar
+            int bestRefIndex = -1;
+            int bestMatchTier = -1; // 2: exact, 1: order-insensitive (var-multiset), 0: type-stripped + order-insensitive
+
+            for (int refLineIndex = 0; refLineIndex < refLines.length; refLineIndex++) {
+                if (usedReferenceLine[refLineIndex]) continue;
+
+                String rawRefLine = refLines[refLineIndex].trim();
+                if (rawRefLine.replaceAll("[\\s{}();,]", "").isEmpty()) {
+                    continue;
+                }
+
+                String normalizedRefLine = rawRefLine.replaceAll("\\s+", " ").trim();
+                ArrayList<String> referenceTokens = extractTokensWithDots(normalizedRefLine);
+                boolean referenceOnlyElseHeader = !referenceTokens.contains("if") && referenceTokens.stream().allMatch(t -> t.equals("{") || t.equals("}") || t.equals("else"));
+                if (referenceOnlyElseHeader) {
+                    continue; // sadece else başlığı olan satırları atla
+                }
+
+                // 1) Doğrudan eşitlik
+                if (normalizedStudentLine.equals(normalizedRefLine)) {
+                    bestRefIndex = refLineIndex; bestMatchTier = 2; break;
+                }
+
+                // 2) Değişken sırası önemsiz
+                ArrayList<String> tokensStudent = studentTokens;
+                ArrayList<String> tokensReference = referenceTokens;
+                if (tokensStudent.size() == tokensReference.size()) {
+                    boolean sameNonVarStructure = true;
+                    List<String> studentVarsList = new ArrayList<>();
+                    List<String> refVarsList = new ArrayList<>();
+                    for (int k = 0; k < tokensStudent.size(); k++) {
+                        String tokenStudent = tokensStudent.get(k), tokenRef = tokensReference.get(k);
+                        boolean isVarStudent = isVariable(tokenStudent), isVarRef = isVariable(tokenRef);
+                        if (isVarStudent != isVarRef) { sameNonVarStructure = false; break; }
+                        if (!isVarStudent) { if (!tokenStudent.equals(tokenRef)) { sameNonVarStructure = false; break; } }
+                        else { studentVarsList.add(tokenStudent); refVarsList.add(tokenRef); }
+                    }
+                    if (sameNonVarStructure) {
+                        Collections.sort(studentVarsList); Collections.sort(refVarsList);
+                        if (studentVarsList.equals(refVarsList)) {
+                            if (bestMatchTier < 1) { bestRefIndex = refLineIndex; bestMatchTier = 1; }
+                        }
+                    }
+                }
+
+                // 3) Tip tokenlarını yok say + değişken sırası önemsiz
+                if (bestMatchTier < 1) {
+                    int studentStartIdx = 0, referenceStartIdx = 0;
+                    while (studentStartIdx < tokensStudent.size() && (isTypeToken(tokensStudent.get(studentStartIdx)) || tokensStudent.get(studentStartIdx).equals("[") || tokensStudent.get(studentStartIdx).equals("]"))) studentStartIdx++;
+                    while (referenceStartIdx < tokensReference.size() && (isTypeToken(tokensReference.get(referenceStartIdx)) || tokensReference.get(referenceStartIdx).equals("[") || tokensReference.get(referenceStartIdx).equals("]"))) referenceStartIdx++;
+                    List<String> studentTailTokens = tokensStudent.subList(studentStartIdx, tokensStudent.size());
+                    List<String> referenceTailTokens = tokensReference.subList(referenceStartIdx, tokensReference.size());
+                    if (studentTailTokens.size() == referenceTailTokens.size()) {
+                        boolean sameNonVarStructureAfterTypeStrip = true;
+                        List<String> studentVarsTail = new ArrayList<>();
+                        List<String> refVarsTail = new ArrayList<>();
+                        for (int k = 0; k < studentTailTokens.size(); k++) {
+                            String tokenStudent = studentTailTokens.get(k), tokenRef = referenceTailTokens.get(k);
+                            boolean isVarStudent = isVariable(tokenStudent), isVarRef = isVariable(tokenRef);
+                            if (isVarStudent != isVarRef) { sameNonVarStructureAfterTypeStrip = false; break; }
+                            if (!isVarStudent) { if (!tokenStudent.equals(tokenRef)) { sameNonVarStructureAfterTypeStrip = false; break; } }
+                            else { studentVarsTail.add(tokenStudent); refVarsTail.add(tokenRef); }
+                        }
+                        if (sameNonVarStructureAfterTypeStrip) {
+                            Collections.sort(studentVarsTail); Collections.sort(refVarsTail);
+                            if (studentVarsTail.equals(refVarsTail)) {
+                                if (bestMatchTier < 0) { bestRefIndex = refLineIndex; bestMatchTier = 0; }
+                            }
+                        }
+                    }
+                }
+
+                // Subset kontrolü kaldırıldı (performans ve sadelik için)
+            }
+
+            if (bestRefIndex >= 0) {
+                usedReferenceLine[bestRefIndex] = true;
+                matches.add(new Pair<>(studentLineIndex + 1, bestRefIndex + 1));
             }
         }
         return matches;  // Bulunan tüm eşleşmeleri döndür
@@ -1385,14 +1546,13 @@ public class Assessment {
 
 
     private void generateMappingsRecursive(List<String> studentVars, List<String> refVars, int index, Map<String, String> currentMapping, List<Map<String, String>> allMappings) {
-        // Base case: Tüm öğrenci değişkenleri eşleştirildiyse
         if (index == studentVars.size()) {
-            // Bu mapping'i sonuç listesine ekle (kopyasını al çünkü currentMapping değişecek)
+            // Bu mapping'i sonuç listesine ekle
             allMappings.add(new HashMap<>(currentMapping));
             return;  // Bu dal tamamlandı, geri dön
         }
 
-        // Recursive case: Mevcut index'teki öğrenci değişkeni için tüm olası referans değişkenlerini dene
+        // Mevcut index'teki öğrenci değişkeni için tüm olası referans değişkenlerini dene
         String currentStudentVar = studentVars.get(index);
 
         // Her referans değişkeni için dene O(n!) karmaşıklık
@@ -1407,6 +1567,98 @@ public class Assessment {
 
             // Backtrack: Bu eşleştirmeyi geri al ki diğer olasılıkları deneyebilelim
             currentMapping.remove(currentStudentVar);
+        }
+    }
+
+    // öğrenci değişkenlerinden seçilen bir altküme, ref değişkenlerinden seçilen aynı büyüklükte altkümeye birebir eşleştiriyoruz
+    private void generatePartialMappings(List<String> studentVars, List<String> refVars, List<Map<String, String>> allMappings) {
+        // Öğrenci ve referans değişkenlerinin sayısını al
+        int numStudentVars = studentVars.size();
+        int numRefVars = refVars.size();
+        int maxMatchSize = Math.min(numStudentVars, numRefVars);
+
+        // matchSize: Eşleştirilecek değişken sayısı (1'den başlar, iki taraftan küçük olana kadar)
+        for (int matchSize = 1; matchSize <= maxMatchSize; matchSize++) {
+            // Güvenlik için; pratikte matchSize zaten 1..maxMatchSize olur
+            if (matchSize == 0) continue;
+
+            // Öğrenciden seçilen indeks kombinasyonu
+            int[] studentIndexCombo = new int[matchSize];
+            // [0,1,2,...,matchSize-1] olarak başlat (ilk kombinasyon)
+            for (int i = 0; i < matchSize; i++) studentIndexCombo[i] = i;
+            boolean studentCombosExhausted = false;
+            // Öğrencinin matchSize'lı tüm kombinasyonlarını üret
+            while (!studentCombosExhausted) {
+                // O anki öğrenci kombinasyonunun gerçek isim listesi
+                List<String> selectedStudentVars = new ArrayList<>(matchSize);
+                for (int studentIdx : studentIndexCombo) selectedStudentVars.add(studentVars.get(studentIdx));
+
+                // Referans tarafında matchSize'lı kombinasyon indeksleri
+                int[] refIndexCombo = new int[matchSize];
+                // [0,1,2,...,matchSize-1] olarak başlat (ilk kombinasyon)
+                for (int i = 0; i < matchSize; i++) refIndexCombo[i] = i;
+                boolean refCombosExhausted = false;
+                // Referansın matchSize'lı tüm kombinasyonlarını üret
+                while (!refCombosExhausted) {
+                    // O anki referans kombinasyonunun gerçek isim listesi
+                    List<String> selectedRefVars = new ArrayList<>(matchSize);
+                    for (int refIdx : refIndexCombo) selectedRefVars.add(refVars.get(refIdx));
+
+                    // selectedRefVars'ın tüm permütasyonlarını deneyip selectedStudentVars ile birebir eşleştir
+                    permuteAndMap(selectedStudentVars, selectedRefVars, new boolean[selectedRefVars.size()], new HashMap<>(), allMappings);
+
+                    // Referans tarafında bir SONRAKİ kombinasyona geç (lexikografik artırma)
+                    int walkRef = matchSize - 1;
+                    while (walkRef >= 0 && refIndexCombo[walkRef] == numRefVars - matchSize + walkRef) walkRef--;
+                    if (walkRef < 0) {
+                        refCombosExhausted = true;
+                    } else {
+                        refIndexCombo[walkRef]++;
+                        for (int pos = walkRef + 1; pos < matchSize; pos++) refIndexCombo[pos] = refIndexCombo[pos - 1] + 1;
+                    }
+                }
+
+                // Öğrenci tarafında bir SONRAKİ kombinasyona geç (lexikografik artırma)
+                int walkStudent = matchSize - 1;
+                while (walkStudent >= 0 && studentIndexCombo[walkStudent] == numStudentVars - matchSize + walkStudent) walkStudent--;
+                if (walkStudent < 0) {
+                    studentCombosExhausted = true;
+                } else {
+                    studentIndexCombo[walkStudent]++;
+                    for (int pos = walkStudent + 1; pos < matchSize; pos++) studentIndexCombo[pos] = studentIndexCombo[pos - 1] + 1;
+                }
+            }
+        }
+
+        // Hiç mapping üretilmediyse, en az bir boş mapping döndür
+        if (allMappings.isEmpty()) {
+            allMappings.add(Collections.emptyMap());
+        }
+    }
+
+    private void permuteAndMap(List<String> selectedStudentVars, List<String> selectedRefVars, boolean[] usedRefFlags, Map<String, String> currentMapping, List<Map<String, String>> outputMappings) {
+        // Tüm öğrenci değişkenleri eşleştirildiyse, currentMapping'i sonuçlara ekle
+        if (currentMapping.size() == selectedStudentVars.size()) { outputMappings.add(new HashMap<>(currentMapping)); return; }
+
+        // Sıradaki öğrenci değişkeninin index'i
+        int currentDepth = currentMapping.size();
+        // Eşleştirilecek öğrenci değişkeni
+        String studentVar = selectedStudentVars.get(currentDepth);
+
+        // selectedRefVars içindeki her referans değişkenini dene
+        for (int refIndex = 0; refIndex < selectedRefVars.size(); refIndex++) {
+            // Daha önce kullanıldıysa atla
+            if (usedRefFlags[refIndex]) continue;
+            // Bu referans değişkenini kullanılıyor olarak işaretle
+            usedRefFlags[refIndex] = true;
+            // studentVar -> selectedRefVars[refIndex] eşlemesini kur
+            currentMapping.put(studentVar, selectedRefVars.get(refIndex));
+            // Derinleş: bir sonraki öğrenciyi eşleştir
+            permuteAndMap(selectedStudentVars, selectedRefVars, usedRefFlags, currentMapping, outputMappings);
+            // bu eşleştirmeyi kaldır
+            currentMapping.remove(studentVar);
+            // referans değişkenini tekrar kullanılabilir
+            usedRefFlags[refIndex] = false;
         }
     }
 
@@ -1432,5 +1684,4 @@ public class Assessment {
 
         return result;
     }
-
 }

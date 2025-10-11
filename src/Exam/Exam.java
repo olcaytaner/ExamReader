@@ -32,7 +32,7 @@ public class Exam {
 
         for (File file : filesAndFolders) {
             String name = file.getName();
-            String fileDirectory= file.getAbsolutePath();
+            String fileDirectory = file.getAbsolutePath();
             if (name.startsWith("Q")) {
                 String questionNo = name.substring(1);
                 questions.add(new Question(questionNo, fileDirectory));
@@ -43,13 +43,13 @@ public class Exam {
     }
 
 
-    public String getStudentCode (String questionNo, String studentNo) throws IOException {
+    public String getStudentCode(String questionNo, String studentNo) throws IOException {
         String code = "";
-        for ( Question question: this.questions){
-            if(question.getQuestionNo().equals(questionNo)){
+        for (Question question : this.questions) {
+            if (question.getQuestionNo().equals(questionNo)) {
                 Question currentQ = question;
-                for (StudentCode student: currentQ.getStudents()){
-                    if(student.getStudentNo().equals(studentNo)){
+                for (StudentCode student : currentQ.getStudents()) {
+                    if (student.getStudentNo().equals(studentNo)) {
                         code = Files.readString(Path.of(student.getPath()));
                     }
                 }
@@ -57,7 +57,6 @@ public class Exam {
         }
         return code;
     }
-
 
 
     public String getExamName() {
@@ -150,7 +149,7 @@ public class Exam {
                              Path tmpDir,
                              Path destDir,
                              String baseName,
-                             Map<String,String> nodeLabelMap) throws IOException, InterruptedException {
+                             Map<String, String> nodeLabelMap) throws IOException, InterruptedException {
 
         // DOT dosyasını oluştur
         g.saveGraphviz(tmpDir.toString(), baseName, baseName, nodeLabelMap);
@@ -201,20 +200,26 @@ public class Exam {
         if (!Files.exists(dir)) return;
         Files.walk(dir)
                 .sorted(Comparator.reverseOrder())
-                .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
+                .forEach(p -> {
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException ignored) {
+                    }
+                });
     }
 
     private static String sanitize(String name) {
         // Windows için yasaklı karakterleri güvenli hale getir
         return name.replaceAll("[\\\\/:*?\"<>|]", "-").trim();
     }
+
     public StudentCode getStudentObject(String questionNo, String studentNo) throws IOException {
         StudentCode studentR = null;
-        for ( Question question: this.questions){
-            if(question.getQuestionNo().equals(questionNo)){
+        for (Question question : this.questions) {
+            if (question.getQuestionNo().equals(questionNo)) {
                 Question currentQ = question;
-                for (StudentCode student: currentQ.getStudents()){
-                    if(student.getStudentNo().equals(studentNo)){
+                for (StudentCode student : currentQ.getStudents()) {
+                    if (student.getStudentNo().equals(studentNo)) {
                         studentR = student;
                     }
                 }
@@ -293,7 +298,7 @@ public class Exam {
             String qNo = question.getQuestionNo();
             for (StudentCode student : question.getStudents()) {
                 for (Assessment a : student.getAssessments()) {
-                    if (a.isAstFailed() ) {
+                    if (a.isAstFailed()) {
                         System.out.println("Q" + qNo + " - " + student.getStudentNo() + " -> AST not done");
                     }
                     if ((a.isCfgFailed() || a.getControlFlowGraph() == null)) {
@@ -307,6 +312,8 @@ public class Exam {
             }
         }
     }
+
+
 }
 
 

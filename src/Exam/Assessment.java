@@ -1684,4 +1684,34 @@ public class Assessment {
 
         return result;
     }
+    public void toGraphvizWithHighlights(String directory, List<Pair<Integer, Integer>> matchedLines) {
+        try {
+            // 🔹 matchMap'i listeye çeviriyoruz (sadece öğrenci satırlarını alıyoruz)
+            List<Integer> highlightLines = new ArrayList<>();
+            for (Pair<Integer, Integer> p : matchedLines) {
+                if (p != null && p.getKey() != null) {
+                    highlightLines.add(p.getKey());
+                }
+            }
+
+            // 🔥 AST, CFG, DDG renklendirilmiş olarak kaydediliyor
+            if (abstractSyntaxTree != null) {
+                abstractSyntaxTree.saveGraphviz(directory, "ast_highlighted", "AST_Highlighted", astNodeLabels, highlightLines);
+            }
+            if (controlFlowGraph != null) {
+                controlFlowGraph.saveGraphviz(directory, "cfg_highlighted", "CFG_Highlighted", cfgNodeLabels, highlightLines);
+            }
+            if (dataDependencyGraph != null) {
+                dataDependencyGraph.saveGraphviz(directory, "ddg_highlighted", "DDG_Highlighted", ddgNodeLabels, highlightLines);
+            }
+
+            System.out.println("✅ Renkli Graphviz çıktıları kaydedildi: " + directory);
+        } catch (Exception e) {
+            System.err.println("⚠️ Graphviz renklendirme hatası: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+
 }

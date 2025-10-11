@@ -1,13 +1,11 @@
 package Graph;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.io.PrintWriter;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Graph {
 
@@ -18,10 +16,11 @@ public class Graph {
     }
 
     public void put(String from, String to) {
-        if (!graph.containsKey(from)) {
-            graph.put(from, new HashSet<>());
-        }
-        graph.get(from).add(to);
+        graph.computeIfAbsent(from, k -> new HashSet<>()).add(to);
+    }
+
+    public HashMap<String, HashSet<String>> getGraph() {
+        return this.graph;
     }
 
     @Override
@@ -29,77 +28,93 @@ public class Graph {
         StringBuilder str = new StringBuilder();
         for (String node : graph.keySet()) {
             for (String key : graph.get(node)) {
-                str.append(node).append( " -> ").append(key).append("\n");
+                str.append(node).append(" -> ").append(key).append("\n");
             }
         }
         return str.toString();
     }
 
     public Graph clone() {
-        Graph graph = new Graph();
-        for (String key : this.graph.keySet()) {
-            for (String value : this.graph.get(key)) {
-                graph.put(key, value);
-            }
-        }
-        return graph;
-    }
-    public HashMap<String, HashSet<String>> getGraph() {
-        return this.graph;
-    }
-    public String toGraphvizString(String graphName) {
-        StringBuilder dot = new StringBuilder();
-        dot.append("digraph \"").append(escapeDot(graphName)).append("\" {\n");
-        dot.append("    node [shape=box];\n");
-
-        java.util.Set<String> allNodes = new java.util.HashSet<>();
-        for (String from : this.graph.keySet()) {
-            allNodes.add(from);
-            for (String to : this.graph.get(from)) {
-                allNodes.add(to);
-            }
-        }
-
-        for (String from : this.graph.keySet()) {
-            for (String to : this.graph.get(from)) {
-                dot.append("    \"").append(escapeDot(from)).append("\" -> \"").append(escapeDot(to)).append("\";\n");
-            }
-        }
-
-        for (String node : allNodes) {
-            dot.append("    \"").append(escapeDot(node)).append("\" [label=\"").append(escapeDot(node)).append("\"];\n");
-        }
-
-        dot.append("}\n");
-        return dot.toString();
-    }
-    public void saveGraphviz(String directory, String filename, String graphName, Map<String,String> nodeLabelMap) throws IOException {
-        FileWriter writer = new FileWriter(directory + "/" + filename + ".dot");
-        writer.write("digraph \"" + escapeDot(graphName) + "\" {\n");
-        writer.write("    node [shape=box];\n");
-
+        Graph g = new Graph();
         for (String from : graph.keySet()) {
             for (String to : graph.get(from)) {
-                String fromLabel = nodeLabelMap.getOrDefault(from, from);
-                String toLabel   = nodeLabelMap.getOrDefault(to, to);
-
-                writer.write("    \"" + escapeDot(from) + "\" [label=\"" + escapeDot(fromLabel) + "\"];\n");
-                writer.write("    \"" + escapeDot(to) + "\" [label=\"" + escapeDot(toLabel) + "\"];\n");
-                writer.write("    \"" + escapeDot(from) + "\" -> \"" + escapeDot(to) + "\";\n");
+                g.put(from, to);
             }
         }
+        return g;
+    }
 
-        writer.write("}\n");
-        writer.close();
+    public void saveGraphviz(String directory,
+                             String fileName,
+                             String graphName,
+                             Map<String, String> nodeLabels,
+                             List<Integer> highlightLines) throws IOException {
+
+        File outFile = new File(directory, fileName + ".dot");
+        try (PrintWriter writer = new PrintWriter(outFile)) {
+            writer.println("digraph \"" + escapeDot(graphName) + "\" {");
+            writer.println("  node [shape=box, style=filled, fontname=\"Helvetica\"];");
+
+            // Edges
+            for (Map.Entry<String, HashSet<String>> e : graph.entrySet()) {
+                String from = e.getKey();
+                for (String to : e.getValue()) {
+                    writer.printf("  \"%s\" -> \"%s\";%n", escapeDot(from), escapeDot(to));
+                }
+            }
+
+            // Nodes (renkli)
+            for (Map.Entry<String, String> entry : nodeLabels.entrySet()) {
+                String nodeId = entry.getKey();
+                String label = entry.getValue();
+
+                Integer lineNo = extractLineNo(nodeId, label);
+                String color = "white";
+
+                if (lineNo != null) {
+                    color = (highlightLines != null && highlightLines.contains(lineNo))
+                            ? "#9aff9a" // yeşil: eşleşen
+                            : "#ffb3b3"; // kırmızı: eşleşmeyen
+                }
+
+                writer.printf("  \"%s\" [label=\"%s\", style=filled, fillcolor=\"%s\"];%n",
+                        escapeDot(nodeId),
+                        escapeDot(label),
+                        color);
+            }
+
+            writer.println("}");
+        }
     }
 
 
+    public void saveGraphviz(String directory,
+                             String fileName,
+                             String graphName,
+                             Map<String, String> nodeLabels) throws IOException {
+        // Boş highlight listesiyle çağır
+        saveGraphviz(directory, fileName, graphName, nodeLabels, Collections.emptyList());
+    }
+
+
+    private static Integer extractLineNo(String nodeId, String label) {
+        Matcher m;
+        // if-12, statement-7 gibi ID'lerden
+        m = Pattern.compile("-(\\d+)$").matcher(nodeId);
+        if (m.find()) return Integer.parseInt(m.group(1));
+
+        // Label içinde "Line 7" veya "(Line 7)"
+        m = Pattern.compile("\\bLine\\s*(\\d+)\\b").matcher(label);
+        if (m.find()) return Integer.parseInt(m.group(1));
+        m = Pattern.compile("\\(\\s*Line\\s*(\\d+)\\s*\\)").matcher(label);
+        if (m.find()) return Integer.parseInt(m.group(1));
+
+        return null;
+    }
 
 
     private static String escapeDot(String s) {
         if (s == null) return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
-
-
 }

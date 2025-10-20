@@ -1,9 +1,11 @@
 import Exam.*;
+
+import java.io.IOException;
 import java.util.*;
 
 public class Main {
-    public static void main(String[] args) {
-        String studentCode = """
+    public static void main(String[] args) throws IOException {
+        /*String studentCode = """
                 int x = 5;
                 int y = 10;
                 if (x < y) {
@@ -28,10 +30,13 @@ public class Main {
         Assessment student = new Assessment(100, "ok", false, "", studentCode);
         Assessment reference = new Assessment(100, "ok", false, "", referenceCode);
 
-        // Eşleşme bul
         Assessment.MatchResult result = student.calculateBestMatch(reference);
 
-        // 🔥 Renkli Graphviz dosyaları oluştur
         student.toGraphvizWithHighlights("C:\\Users\\Mujgan\\Desktop\\test", result.matchedLines);
+
+         */
+        Exam test=new Exam("C:\\Users\\Mujgan\\Dropbox\\Final-Annotated (1)","Summer2024-Final");
+        test.exportGradingPNGsColored("C:\\Users\\Mujgan\\Dropbox\\Grading","F");
+
     }
 }

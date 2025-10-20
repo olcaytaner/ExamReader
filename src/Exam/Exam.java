@@ -1,5 +1,8 @@
 package Exam;
 
+import Graph.Pair;
+
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -9,6 +12,11 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.List;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
+
 
 
 public class Exam {
@@ -313,7 +321,164 @@ public class Exam {
         }
     }
 
+    // -------------------------------------------------------------------
+
+    public void exportGradingPNGsColored(String gradingRootDir, String examTypeLetter) throws IOException {
+        Path gradingRoot = Paths.get(gradingRootDir);
+        Files.createDirectories(gradingRoot);
+
+        String typeSuffix = (examTypeLetter != null && !examTypeLetter.isBlank()) ? examTypeLetter : "";
+
+        for (Question q : this.questions) {
+            for (RefCode ref : q.getRefcodes()) {
+                ArrayList<Assessment> refAssess = ref.getAssessments();
+                int refId = ref.getRefCodeNo();
+
+                for (int i = 0; i < refAssess.size(); i++) {
+                    Assessment refA = refAssess.get(i);
+                    int refScore = refA.getGrade();
+
+                    String caseFolderName = sanitize(
+                            String.format("%s, Question %s, RefCode%d, A%d%s",
+                                    this.examName, q.getQuestionNo(), refId, i + 1, typeSuffix)
+                    );
+
+                    Path caseDir = gradingRoot
+                            .resolve(String.valueOf(refScore))
+                            .resolve(caseFolderName);
+
+                    Files.createDirectories(caseDir);
+
+                    // 1) Referans PNG'leri (RENKSİZ) – aynı klasör yapısı
+                    renderAssessmentPNGsTo(caseDir, refA, "ref" + refId);
+
+                    // 2) Öğrenciler (RENKLİ) – renksiz metotla AYNI klasörleme:
+                    //    <caseDir>/<stuScore>/<studentNo>-*-colored.png
+                    for (StudentCode st : q.getStudents()) {
+                        if (st.isSkip()) continue;
+                        if (st.getRefCodeNo() != refId) continue;
+
+                        ArrayList<Assessment> stuAssess = st.getAssessments();
+                        if (i < stuAssess.size()) {
+                            Assessment stuA = stuAssess.get(i);
+                            if (stuA != null) {
+                                int stuScore = stuA.getGrade();
+
+                                Path stuBucket = caseDir.resolve(String.valueOf(stuScore));
+                                Files.createDirectories(stuBucket);
+
+                                // NOT: Artık öğrenci numarasına göre alt klasör yok;
+                                // dosya adında öğrenci no kullanılıyor (renksiz metotla aynı yaklaşım).
+                                renderAssessmentPNGsColoredTo(stuBucket, stuA, refA, st.getStudentNo());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    private void renderAssessmentPNGsColoredTo(java.nio.file.Path destDir,
+                                               Assessment studentA,
+                                               Assessment referenceA,
+                                               String prefix) throws IOException {
+        java.nio.file.Files.createDirectories(destDir);
+        java.nio.file.Path tmpDir = java.nio.file.Files.createTempDirectory("graphviz_tmp_colored_");
+        try {
+            // Öğrenci–ref kıyası: eşleşen satırlar
+            Assessment.MatchResult match = studentA.calculateBestMatch(referenceA);
+
+            if (studentA.getAbstractSyntaxTree() != null) {
+                saveColoredPng(
+                        studentA.getAbstractSyntaxTree(),
+                        tmpDir,
+                        destDir,
+                        prefix + "-ast-colored",
+                        studentA.getAstNodeLabels(),
+                        match.matchedLines
+                );
+            }
+            if (studentA.getControlFlowGraph() != null) {
+                saveColoredPng(
+                        studentA.getControlFlowGraph(),
+                        tmpDir,
+                        destDir,
+                        prefix + "-cfg-colored",
+                        studentA.getCfgNodeLabels(),
+                        match.matchedLines
+                );
+            }
+            if (studentA.getDataDependencyGraph() != null) {
+                saveColoredPng(
+                        studentA.getDataDependencyGraph(),
+                        tmpDir,
+                        destDir,
+                        prefix + "-ddg-colored",
+                        studentA.getDdgNodeLabels(),
+                        match.matchedLines
+                );
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Graphviz işlemi kesildi", e);
+        } finally {
+            deleteDirectoryRecursive(tmpDir);
+        }
+    }
+
+    // Exam.java içine ekle
+    private void saveColoredPng(
+            Graph.Graph g,
+            java.nio.file.Path tmpDir,
+            java.nio.file.Path destDir,
+            String baseName,
+            java.util.Map<String, String> nodeLabelMap,
+            java.util.List<Graph.Pair<java.lang.Integer, java.lang.Integer>> matchedLines
+    ) throws java.io.IOException, InterruptedException {
+
+        // 1) matchedLines -> sadece ÖĞRENCİ satır numaraları (yeşil boyanacaklar)
+        java.util.List<java.lang.Integer> highlightLines = new java.util.ArrayList<>();
+        if (matchedLines != null) {
+            for (Graph.Pair<java.lang.Integer, java.lang.Integer> p : matchedLines) {
+                if (p != null && p.getKey() != null) {
+                    highlightLines.add(p.getKey());
+                }
+            }
+        }
+
+        // 2) DOT’u renkli yaz
+        java.nio.file.Files.createDirectories(tmpDir);
+        g.saveGraphviz(tmpDir.toString(), baseName, baseName, nodeLabelMap, highlightLines);
+
+        java.nio.file.Path dotFile = tmpDir.resolve(baseName + ".dot");
+        java.nio.file.Path pngFile = tmpDir.resolve(baseName + ".png");
+        if (!java.nio.file.Files.exists(dotFile)) {
+            throw new java.io.IOException("DOT file not created: " + dotFile);
+        }
+
+        // 3) dot -> png
+        String dotExe = System.getProperty("graphviz.dot", "dot");
+        ProcessBuilder pb = new ProcessBuilder(
+                dotExe, "-Tpng",
+                dotFile.toAbsolutePath().toString(),
+                "-o", pngFile.toAbsolutePath().toString()
+        );
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        try (java.io.BufferedReader r =
+                     new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
+            while (r.readLine() != null) { /* çıktıyı tüket */ }
+        }
+        int exit = p.waitFor();
+        if (exit != 0) throw new java.io.IOException("Graphviz dot failed, exit=" + exit);
+
+        // 4) hedefe taşı
+        java.nio.file.Files.createDirectories(destDir);
+        java.nio.file.Files.move(pngFile, destDir.resolve(baseName + ".png"),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+        System.out.println("PNG yazıldı: " + destDir.resolve(baseName + ".png"));
+    }
+
+
 
 }
-
-

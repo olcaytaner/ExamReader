@@ -1705,9 +1705,9 @@ public class Assessment {
                 dataDependencyGraph.saveGraphviz(directory, "ddg_highlighted", "DDG_Highlighted", ddgNodeLabels, highlightLines);
             }
 
-            System.out.println("✅ Renkli Graphviz çıktıları kaydedildi: " + directory);
+
         } catch (Exception e) {
-            System.err.println("⚠️ Graphviz renklendirme hatası: " + e.getMessage());
+            System.err.println("Graphviz error: " + e.getMessage());
             e.printStackTrace();
         }
     }

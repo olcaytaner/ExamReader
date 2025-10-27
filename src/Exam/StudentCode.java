@@ -3,7 +3,10 @@ package Exam;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.*;
 
 public class StudentCode extends Code {
@@ -14,6 +17,7 @@ public class StudentCode extends Code {
         super(refCodeNo, path);
         this.studentNo = studentNo;
         this.skip = skip;
+        this.variables = new ArrayList<>();
         loadAssessments(path);
     }
 
@@ -36,6 +40,7 @@ public class StudentCode extends Code {
         }
 
         parseFile(lines);
+        rebuildVariablesFromAssessments();
     }
 
     public void setSkip(boolean skip) {

@@ -2,12 +2,17 @@ package Exam;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Code {
     protected ArrayList<Assessment> assessments = new ArrayList<>();
     protected int refCodeNo;
     protected String path;
+
+    // tüm koddaki tüm değişkenlerin tutulacağı array list.
+    protected List<Variable> variables;
 
     public Code(int refCodeNo, String path) throws IOException {
         this.refCodeNo = refCodeNo;
@@ -54,12 +59,42 @@ public class Code {
                     i++;
                 }
 
-                Assessment a = new Assessment(grade, feedback, violation, violationString, code.toString());
+                Assessment a = new Assessment(grade, feedback, violation, violationString, code.toString(), this);
                 assessments.add(a);
             } else {
                 i++;
             }
         }
+    }
+
+
+    // Basit isimle arama (assessment classında kullanmak için)
+    public Variable findByName(String name) {
+        if (name == null) return null;
+        for (Variable v : variables) {
+            if (name.equals(v.getName())) return v;
+        }
+        return null;
+    }
+
+    public void rebuildVariablesFromAssessments() {
+        Map<String, Variable> map = new LinkedHashMap<>();
+        for (Assessment a : getAssessments()) {
+            // Mevcut getAllVariables() ham sonucu kullanılır (öğrenci envanterine bakmadan).
+            for (Variable v : a.getAllVariables()) {
+                // isim tekilleştirme
+                Variable existing = map.get(v.getName());
+                if (existing == null) {
+                    map.put(v.getName(), new Variable(v.getType(), v.getName()));
+                } else {
+                    // İsterseniz tip boşsa doldurun; boş kalması da kabul.
+                    if (existing.getType() == null && v.getType() != null) {
+                        existing.setType(v.getType());
+                    }
+                }
+            }
+        }
+        this.variables = new ArrayList<>(map.values());
     }
 
     public int getRefCodeNo() {
@@ -72,5 +107,12 @@ public class Code {
 
     public String getPath() {
         return path;
+    }
+
+    public List<Variable> getVariables() {
+        return variables;
+    }
+    public void setVariables(List<Variable> variables) {
+        this.variables = (variables != null) ? variables : new ArrayList<>();
     }
 }

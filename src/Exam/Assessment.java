@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 
 import Graph.*;
 
+import Exam.Code;
+
 
 
 public class Assessment {
@@ -15,6 +17,7 @@ public class Assessment {
     private final boolean violation;
     private final String violationString;
     private final String codeBlock;
+    private Code code;
     private Graph abstractSyntaxTree;
     private Graph controlFlowGraph;
     private Graph dataDependencyGraph;
@@ -53,6 +56,11 @@ public class Assessment {
         generateASTGraph();
         generateCFGGraph();
         generateDDGGraph();
+    }
+
+    public Assessment(int grade, String feedback, boolean violation, String violationString, String codeBlock, Code code) {
+        this(grade, feedback, violation, violationString, codeBlock); // eski constructor burada kullanılıyor
+        this.code = code; // code burada atanıyor.
     }
 
 
@@ -96,6 +104,13 @@ public class Assessment {
         return feedback;
     }
 
+    public Code getCode() {
+        return code;
+    }
+
+    public void setCode(Code code) {
+        this.code = code;
+    }
 
     public static ArrayList<String> extractTokens(String line) {
         ArrayList<String> tokens = new ArrayList<>();
@@ -1340,6 +1355,23 @@ public class Assessment {
                 }
             }
 
+        }
+
+        if (this.code != null && this.code.getVariables() != null && !this.code.getVariables().isEmpty()) {
+            Map<String, String> typeByName = new HashMap<>();
+            for (Variable sv : this.code.getVariables()) {
+                if (sv.getName() != null && sv.getType() != null) {
+                    typeByName.putIfAbsent(sv.getName(), sv.getType());
+                }
+            }
+            for (Variable v : vars.values()) {
+                if (v.getType() == null) {
+                    String t = typeByName.get(v.getName());
+                    if (t != null) {
+                        v.setType(t);
+                    }
+                }
+            }
         }
 
         return new LinkedHashSet<>(vars.values());

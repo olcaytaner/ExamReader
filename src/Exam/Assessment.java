@@ -1417,71 +1417,102 @@ public class Assessment {
         List<Pair<Integer, Integer>> matches = compareLines(studentLines, refLines, studentVars, refVars);
         return new MatchResult(Collections.emptyMap(), matches);
     }
+    private ArrayList<String> filterTokens(ArrayList<String> tokens) {
+        ArrayList<String> normalized = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+
+        for (String token : tokens) {
+            token = token.trim();
+
+            // "this" tamamen sil
+            if (token.equals("this")) continue;
+
+            // "this." ile başlayanlar -> sadece nokta sonrasını al
+            if (token.startsWith("this.")) {
+                token = token.substring(5);
+            }
+
+
+            if (token.contains(".get")) {
+                int idx = token.indexOf(".get");
+                token = token.substring(0, idx); // .get öncesi
+            }
+
+            // Eğer token sadece parantezse geç
+            if (token.equals("(") || token.equals(")") || token.equals("{") || token.equals("}")) continue;
+
+            // Boş veya tekrar olan tokenları atla
+            if (!token.isEmpty() && !seen.contains(token)) {
+                normalized.add(token);
+                seen.add(token);
+            }
+        }
+
+        return normalized;
+    }
+
+
+
+
+
+
 
     private List<Pair<Integer, Integer>> compareLines(String[] studentLines, String[] refLines, Set<String> studentVars, Set<String> refVars) {
         List<Pair<Integer, Integer>> matches = new ArrayList<>();
         boolean[] usedReferenceLine = new boolean[refLines.length];
 
-        for (int studentLineIndex = 0; studentLineIndex < studentLines.length; studentLineIndex++) {
-            String rawStudentLine = studentLines[studentLineIndex].trim();
-            if (rawStudentLine.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
+        for (int sIdx = 0; sIdx < studentLines.length; sIdx++) {
+            String rawS = studentLines[sIdx].trim();
+            if (rawS.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
 
-            String normalizedStudentLine = rawStudentLine.replaceAll("\\s+", " ").trim();
-            ArrayList<String> studentTokens = extractTokensWithDots(normalizedStudentLine);
-            boolean studentOnlyElseHeader = !studentTokens.contains("if") &&
-                    studentTokens.stream().allMatch(t -> t.equals("{") || t.equals("}") || t.equals("else"));
-            if (studentOnlyElseHeader) continue;
+            ArrayList<String> sTokens = filterTokens(extractTokensWithDots(rawS));
+            if (sTokens.isEmpty()) continue;
 
-            int bestRefIndex = -1;
+            boolean sElse = !sTokens.contains("if") &&
+                    sTokens.stream().allMatch(t -> t.equals("{") || t.equals("}") || t.equals("else"));
+            if (sElse) continue;
 
-            for (int refLineIndex = 0; refLineIndex < refLines.length; refLineIndex++) {
-                if (usedReferenceLine[refLineIndex]) continue;
+            int bestRef = -1;
 
-                String rawRefLine = refLines[refLineIndex].trim();
-                if (rawRefLine.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
+            for (int rIdx = 0; rIdx < refLines.length; rIdx++) {
+                if (usedReferenceLine[rIdx]) continue;
 
-                String normalizedRefLine = rawRefLine.replaceAll("\\s+", " ").trim();
-                ArrayList<String> referenceTokens = extractTokensWithDots(normalizedRefLine);
-                boolean referenceOnlyElseHeader = !referenceTokens.contains("if") &&
-                        referenceTokens.stream().allMatch(t -> t.equals("{") || t.equals("}") || t.equals("else"));
-                if (referenceOnlyElseHeader) continue;
+                String rawR = refLines[rIdx].trim();
+                if (rawR.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
 
-                // Tam eşitlik kontrolü
-                if (normalizedStudentLine.equals(normalizedRefLine)) {
-                    bestRefIndex = refLineIndex;
+                ArrayList<String> rTokens = filterTokens(extractTokensWithDots(rawR));
+                if (rTokens.isEmpty()) continue;
+
+                boolean rElse = !rTokens.contains("if") &&
+                        rTokens.stream().allMatch(t -> t.equals("{") || t.equals("}") || t.equals("else"));
+                if (rElse) continue;
+
+                boolean isMatch = true;
+                int i = 0, j = 0;
+
+                while (i < sTokens.size() && j < rTokens.size()) {
+                    String ts = sTokens.get(i);
+                    String tr = rTokens.get(j);
+
+                    boolean tsVar = isVariable(ts) || studentVars.contains(ts);
+                    boolean trVar = isVariable(tr) || refVars.contains(tr);
+
+                    if (tsVar && trVar) { i++; j++; continue; }
+                    if (!tsVar && !trVar && ts.equals(tr)) { i++; j++; continue; }
+
+                    isMatch = false;
                     break;
                 }
 
-                // Token bazlı eşleşme (değişken isimleri farklı olabilir)
-                if (studentTokens.size() == referenceTokens.size()) {
-                    boolean isMatch = true;
-                    for (int k = 0; k < studentTokens.size(); k++) {
-                        String ts = studentTokens.get(k);
-                        String tr = referenceTokens.get(k);
-                        boolean tsVar = isVariable(ts) || studentVars.contains(ts);
-                        boolean trVar = isVariable(tr) || refVars.contains(tr);
-
-                        if (tsVar && trVar) {
-                            // Her ikisi de değişken - eşleşme
-                            continue;
-                        } else if (!tsVar && !trVar && ts.equals(tr)) {
-                            // Her ikisi de değişken değil ve eşit - eşleşme
-                            continue;
-                        } else {
-                            isMatch = false;
-                            break;
-                        }
-                    }
-                    if (isMatch) {
-                        bestRefIndex = refLineIndex;
-                        break;
-                    }
+                if (isMatch) {
+                    bestRef = rIdx;
+                    break;
                 }
             }
 
-            if (bestRefIndex >= 0) {
-                usedReferenceLine[bestRefIndex] = true;
-                matches.add(new Pair<>(studentLineIndex + 1, bestRefIndex + 1));
+            if (bestRef >= 0) {
+                usedReferenceLine[bestRef] = true;
+                matches.add(new Pair<>(sIdx + 1, bestRef + 1));
             }
         }
 

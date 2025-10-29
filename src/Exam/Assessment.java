@@ -1,13 +1,12 @@
 package Exam;
 
 
+import Graph.Graph;
+import Graph.LineType;
+import Graph.Pair;
+
 import java.io.FileNotFoundException;
 import java.util.*;
-import java.util.regex.Pattern;
-
-import Graph.*;
-
-import Exam.Code;
 
 
 
@@ -1302,16 +1301,111 @@ public class Assessment {
                             && isTypeToken(itok.get(0)) && isVariable(itok.get(1))) {
                         addIfAbsent(vars, itok.get(1), itok.get(0));   // q : Queue
                     }
+                    // klasik for init: Type a=0, b=1, c[];
+                    else if (!itok.isEmpty() && isTypeToken(itok.get(0))) {
+                        String baseType = itok.get(0);
+                        int i = 1;
+
+                        String typeSuffix = "";
+                        if (i + 1 < itok.size() && "[".equals(itok.get(i)) && "]".equals(itok.get(i + 1))) {
+                            typeSuffix = "[]";
+                            i += 2;
+                        }
+
+                        while (i < itok.size()) {
+                            if (i < itok.size() && isVariable(itok.get(i))) {
+                                String name = itok.get(i); i++;
+
+                                String localSuffix = typeSuffix;
+                                while (i + 1 < itok.size() && "[".equals(itok.get(i)) && "]".equals(itok.get(i + 1))) {
+                                    localSuffix += "[]"; i += 2;
+                                }
+
+                                addIfAbsent(vars, name, baseType + localSuffix);
+
+                                if (i < itok.size() && "=".equals(itok.get(i))) {
+                                    i++;
+                                    int depth = 0;
+                                    while (i < itok.size()) {
+                                        String t = itok.get(i);
+                                        if ("(".equals(t) || "{".equals(t) || "[".equals(t)) depth++;
+                                        else if (")".equals(t) || "}".equals(t) || "]".equals(t)) depth--;
+                                        if (depth == 0 && ",".equals(t)) break; // init kısmında ';' yok
+                                        i++;
+                                    }
+                                }
+                                if (i < itok.size() && ",".equals(itok.get(i))) { i++; continue; }
+                                break; // init biter
+                            } else break;
+                        }
+                    }
+
+                    /*
                     // normal for loop için olan for döngüsü için
                     else if (itok.size() >= 3 && isTypeToken(itok.get(0))
                             && isVariable(itok.get(1)) && "=".equals(itok.get(2))) {
                         addIfAbsent(vars, itok.get(1), itok.get(0));   // k : int
                     }
+
+                     */
                 }
             }
 
             // Array tanımlama  T [ ] name = ...
             ArrayList<String> tok = extractTokensWithDots(line);
+
+            // Çoklu bildirim desteği (Type a=0, b, c[] = foo();) ---
+            if (!tok.isEmpty() && isTypeToken(tok.get(0))) {
+                String baseType = tok.get(0);
+                int i = 1;
+
+                // Tip sonrası [] (örn. int [] a, b;)
+                String typeSuffix = "";
+                if (i + 1 < tok.size() && "[".equals(tok.get(i)) && "]".equals(tok.get(i + 1))) {
+                    typeSuffix = "[]";
+                    i += 2;
+                }
+
+                while (i < tok.size()) {
+                    // Ad
+                    if (i < tok.size() && isVariable(tok.get(i))) {
+                        String name = tok.get(i);
+                        i++;
+
+                        // Ad sonrası []'ler (a[], a[][])
+                        String localSuffix = typeSuffix;
+                        while (i + 1 < tok.size() && "[".equals(tok.get(i)) && "]".equals(tok.get(i + 1))) {
+                            localSuffix += "[]";
+                            i += 2;
+                        }
+
+                        addIfAbsent(vars, name, baseType + localSuffix);
+
+                        // initializer'ı atla (= ... , ;  gelene kadar, parantez derinliği korunur)
+                        if (i < tok.size() && "=".equals(tok.get(i))) {
+                            i++;
+                            int depth = 0;
+                            while (i < tok.size()) {
+                                String t = tok.get(i);
+                                if ("(".equals(t) || "{".equals(t) || "[".equals(t)) depth++;
+                                else if (")".equals(t) || "}".equals(t) || "]".equals(t)) depth--;
+                                if (depth == 0 && (",".equals(t) || ";".equals(t))) break;
+                                i++;
+                            }
+                        }
+
+                        // sonraki bildirim
+                        if (i < tok.size() && ",".equals(tok.get(i))) { i++; continue; }
+                        // ';' veya başka bir şey → tipli bildirim bloğu biter
+                        break;
+                    } else {
+                        break; // beklenmedik token
+                    }
+                }
+            }
+
+
+
             if (    tok.size() >= 5
                     && isTypeToken(tok.get(0))
                     && "[".equals(tok.get(1))
@@ -1330,6 +1424,7 @@ public class Assessment {
                 addIfAbsent(vars, tok.get(2), tok.get(0) + "*");
             }
 
+            /*
             //  Klasik tanımlama  T name = ...
             if (tok.size() >= 3
                     && isTypeToken(tok.get(0))
@@ -1345,6 +1440,7 @@ public class Assessment {
                     && ";".equals(tok.get(2))) {
                 addIfAbsent(vars, tok.get(1), tok.get(0));
             }
+            */
 
             // (sadece extractTokensWithDots + isVariable ile handle edebildiklerimiz)
             // - if/while/for koşullarındaki değişkenleri
@@ -1450,8 +1546,6 @@ public class Assessment {
 
         return normalized;
     }
-
-
 
 
 

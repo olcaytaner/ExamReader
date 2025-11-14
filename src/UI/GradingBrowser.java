@@ -11,7 +11,7 @@ import java.util.Comparator;
 public class GradingBrowser extends JFrame {
 
     // Fixed root
-    private static final Path ROOT = Path.of("C:\\Users\\Mujgan\\Desktop\\test");
+    private static final Path ROOT = Path.of("C:\\Users\\nermi\\Desktop\\hehe.pngs");
 
     // Card layout
     private final CardLayout cardLayout = new CardLayout();

@@ -159,8 +159,17 @@ public class Exam {
                              String baseName,
                              Map<String, String> nodeLabelMap) throws IOException, InterruptedException {
 
-        // DOT dosyasını oluştur
-        g.saveGraphviz(tmpDir.toString(), baseName, baseName, nodeLabelMap);
+        // ref code mu? baseName "ref..." ile başlıyorsa
+        boolean isRef = baseName.startsWith("ref");
+
+        // dot dosyası oluşturulurken prefixe bakılarak hangi graphviz methodunun oluşturulacağına karar verilir.
+        if (isRef) {
+            // RefCode için-> her node farklı renkte olan yeni method
+            g.saveGraphvizUniqueColors(tmpDir.toString(), baseName, baseName, nodeLabelMap);
+        } else {
+            // Öğrenci için-> mevcut davranış eski method(güncellenecek)
+            g.saveGraphviz(tmpDir.toString(), baseName, baseName, nodeLabelMap);
+        }
 
         Path dotFile = tmpDir.resolve(baseName + ".dot");
         Path pngFile = tmpDir.resolve(baseName + ".png");
@@ -199,8 +208,7 @@ public class Exam {
         Files.createDirectories(destDir);
         Files.move(pngFile, destDir.resolve(baseName + ".png"), StandardCopyOption.REPLACE_EXISTING);
 
-        System.out.println("DOT dosyası yazıldı: " + dotFile);
-        System.out.println("PNG dosyası yazıldı: " + destDir.resolve(baseName + ".png"));
+        System.out.println("PNG yazıldı: " + destDir.resolve(baseName + ".png"));
     }
 
 

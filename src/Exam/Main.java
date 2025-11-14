@@ -5,27 +5,9 @@ import java.util.ArrayList;
 
 public class Main {
     public static void main(String[] args) throws IOException {
-        /* String directory ="C:\\Users\\nermi\\Dropbox\\Midterm1-Annotated";
-        //Exam exam = new Exam(directory,"Midterm1");
-        Exam a= new Exam("C:\\Users\\Mujgan\\Dropbox\\Final-Annotated (1)", "Summer2024-Final");
-        a.exportGradingPNGsColored("C:\\Users\\Mujgan\\Desktop\\test","F");
-       Assessment test= new Assessment(2,"",false,"","    if (left->getData() != right->getData()) {\n" +
-                "        return false;\n" +
-                "    } else {\n" +
-                "        flag1 = isMirror(left->getLeft(), right->getRight());\n" +
-                "        flag2 = isMirror(left->getRight()  , right->getLeft());\n" +
-                "    }\n" +
-                "\n" +
-                "    if (flag1 && flag2) {\n" +
-                "        return true;\n" +
-                "    }\n");
-        System.out.println(test.getDataDependencyGraph().toString());
-        ArrayList list=Assessment.extractTokens("if (left->getData() != right->getData()) {\n");
-        for (int i=0; i< list.size();i++){
-            System.out.println(list.get(i));
-        }
-
-        */
+        String directory ="C:\\Users\\nermi\\Desktop\\hehe";
+        Exam exam = new Exam(directory,"Midterm1");
+        exam.exportGradingPNGsColored("C:\\Users\\nermi\\Desktop\\hehe.pngs","idc");
 
         /*
         StudentCode s = new StudentCode(false,"s033247", 1, "C:\\Users\\nermi\\Dropbox\\Midterm1-Annotated (1)\\Q1\\S024527.txt");
@@ -55,7 +37,7 @@ public class Main {
 
          */
 
-
+        /*
         StudentCode ss = new StudentCode(false, "s333888", 1, "C:\\Users\\nermi\\Dropbox\\Midterm1-Annotated (4)\\Q1\\RefCode.java");
         Assessment as = new Assessment(2, "", false, "","int zeroth = 0, first = 1, second = 1, third = zeroth + second;\n" +
                 "    while (third >= A && third <= B) {\n" +
@@ -75,9 +57,7 @@ public class Main {
 
         System.out.println(as.getAllVariables());
 
-
-
-
+         */
 
     }
 }

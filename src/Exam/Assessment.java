@@ -8,8 +8,6 @@ import Graph.Pair;
 import java.io.FileNotFoundException;
 import java.util.*;
 
-
-
 public class Assessment {
     private final int grade;
     private final String feedback;
@@ -111,6 +109,17 @@ public class Assessment {
         this.code = code;
     }
 
+    public static int getVariable(String line, int i, ArrayList<String> tokens){
+        StringBuilder sb = new StringBuilder();
+        while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
+            sb.append(line.charAt(i));
+            i++;
+        }
+        tokens.add(sb.toString());
+        return i;
+    }
+
+    // küçük methodlara bölme yapılacak
     public static ArrayList<String> extractTokens(String line) {
         ArrayList<String> tokens = new ArrayList<>();
         int i = 0;
@@ -119,12 +128,7 @@ public class Assessment {
 
 
             if (Character.isLetter(c)) {
-                StringBuilder sb = new StringBuilder();
-                while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
-                    sb.append(line.charAt(i));
-                    i++;
-                }
-                tokens.add(sb.toString());
+                i = getVariable(line, i, tokens);
             }
 
             else if (Character.isDigit(c)) {
@@ -155,6 +159,7 @@ public class Assessment {
         return tokens;
     }
 
+    // symbol table'a alınacak.
     public static ArrayList<String> extractTokensWithDots(String line) {
         ArrayList<String> tokens = new ArrayList<>();
         int i = 0;
@@ -384,6 +389,8 @@ public class Assessment {
      * @param line
      * @return types in that line as arraylist
      */
+
+    // symbol table'a eklenecek
     private static ArrayList<LineType> getTypes(String line) {
         //updated
         ArrayList<LineType> types = new ArrayList<>();
@@ -417,6 +424,9 @@ public class Assessment {
      * @param codeBlock
      * @return
      */
+
+    // bunu bir object yapısına dönüştürmemiz gerekiyor.
+    // ArrayList<Pair<Integer, LineType>> yapısını
     public static ArrayList<Pair<Integer, LineType>> convertFromCodeBlock(String codeBlock) {
         ArrayList<Pair<Integer, LineType>> current = new ArrayList<>();
 
@@ -482,6 +492,9 @@ public class Assessment {
      * @param last
      * @return boolean - whether the brackets are balanced
      */
+
+    // bunu da o nesnenin bir methodu olarak yazacağız.
+    // ArrayList<Pair<Integer, LineType>>
     private static boolean check(ArrayList<Pair<Integer, LineType>> last) {
         // Opened blocks are stored here (LIFO logic)
         Stack<LineType> stack = new Stack<>();
@@ -508,6 +521,7 @@ public class Assessment {
 
     // type to string methodu. ve yardımcı methodlar
     // construct methodu her satıra karşılık gelen line type'ı graph yapısına ekler
+    //******************************
     private static String constructType(String parent, Graph graph, String line, int j, LineType lineType) {
         String body = "[BODY] (Line " + j + ")";
 
@@ -540,6 +554,7 @@ public class Assessment {
 
 
     // her satırın parantez içini kırpıp alıyor  - koşulu yani.
+    // symbol table'a eklenecek
     private static String extractConditionType(String line) {
         try {
             return line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")).trim();
@@ -551,6 +566,8 @@ public class Assessment {
 
     // solve fonksiyonundaki döngünün devam edip etmeyeceğini () belirlemek için kullanılır.
     // örneğin else iften sonra kapalı parantez arkasından else geliyorsa devam.
+
+    // ArrayList<Pair<Integer, LineType>> nesnesinin methodu
     private static boolean conditionType(int j, ArrayList<Pair<Integer, LineType>> lines) {
         if (lines.get(j).getValue().equals(LineType.CLOSE)) {
             return j + 1 != lines.size() &&
@@ -561,6 +578,8 @@ public class Assessment {
 
 
     // ağaç yapısını oluşturan kısım.
+
+    // ArrayList<Pair<Integer, LineType>> nesnesinin ya da Graphın methodu
     private static int solveType(int j, ArrayList<Pair<Integer, LineType>> lines, Graph graph, String parent, HashMap<Integer, String> map) {
 
         String body = constructType(parent, graph, map.get(lines.get(j).getKey()), j, lines.get(j).getValue());
@@ -606,6 +625,7 @@ public class Assessment {
     }
 
     //wrapper method
+    /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     public static ArrayList<ArrayList<Pair<Integer, LineType>>> convertFromString(String codeBlock) {
         ArrayList<ArrayList<Pair<Integer, LineType>>> result = new ArrayList<>();
 
@@ -619,47 +639,7 @@ public class Assessment {
     }
 
 
-    public static ArrayList<Graph> generateGraphsFromStringType(String input) {
-        ArrayList<Graph> graphs = new ArrayList<>();
-
-        try {
-            HashMap<Integer, String> map = createMapFromString(input);
-            ArrayList<ArrayList<Pair<Integer, LineType>>> lines = convertFromString(input);
-
-
-            for (ArrayList<Pair<Integer, LineType>> assessment : lines) {
-                Graph g = new Graph();
-                String parent = "start";
-                for (int j = 0; j < assessment.size(); j++) {
-
-                    if (assessment.get(j).getValue().equals(LineType.STATEMENT)) {
-                        g.put(parent, LineType.STATEMENT + "-" + assessment.get(j).getKey());
-
-                    } else {
-                        j = solveType(j, assessment, g, parent, map);
-                    }
-                }
-                graphs.add(g.clone());
-            }
-
-        } catch (Exception e) {
-            System.out.println("Input string could not be processed.");
-        }
-        return graphs;
-    }
-
-    // BU KISIM FARKLI - müjganın exam reader'ı (githubdaki son hali). bendeki exam reader ile aynı.
-    public static ArrayList<ArrayList<Graph>> generateGraphsType(String codeBlock) {
-        ArrayList<ArrayList<Graph>> graphs = new ArrayList<>();
-        ArrayList<Graph> singleGraphList = generateGraphsFromStringType(codeBlock);
-        graphs.add(singleGraphList);
-        return graphs;
-    }
-
-
-    // content to string methodu.
-
-
+    // graph'a eklenicek tekrar
     private static String construct(String parent,
                                     Graph graph,
                                     String lineContent,
@@ -699,6 +679,7 @@ public class Assessment {
 
 
     // solve fonksiyonundaki döngünün devam edip etmeyeceğini () belirlemek için kullanılır.
+    // ArrayList<Pair<Integer, LineType>> nesnesinin methodu olacak
     private static boolean condition(int j, ArrayList<Pair<Integer, LineType>> lines) {
         if (lines.get(j).getValue().equals(LineType.CLOSE)) {
             return j + 1 != lines.size() &&
@@ -707,6 +688,8 @@ public class Assessment {
         return true;
     }
 
+
+    // ArrayList<Pair<Integer, LineType>> nesnesinin methodu olacak
     private static int solve(int j,
                              ArrayList<Pair<Integer, LineType>> lines,
                              Graph graph,

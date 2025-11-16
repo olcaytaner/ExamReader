@@ -4,6 +4,7 @@ package Exam;
 import Graph.Graph;
 import Graph.LineType;
 import Graph.Pair;
+import Graph.SymbolTable;
 
 import java.io.FileNotFoundException;
 import java.util.*;
@@ -109,152 +110,6 @@ public class Assessment {
         this.code = code;
     }
 
-    public static int getVariable(String line, int i, ArrayList<String> tokens){
-        StringBuilder sb = new StringBuilder();
-        while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
-            sb.append(line.charAt(i));
-            i++;
-        }
-        tokens.add(sb.toString());
-        return i;
-    }
-
-    // küçük methodlara bölme yapılacak
-    public static ArrayList<String> extractTokens(String line) {
-        ArrayList<String> tokens = new ArrayList<>();
-        int i = 0;
-        while (i < line.length()) {
-            char c = line.charAt(i);
-
-
-            if (Character.isLetter(c)) {
-                i = getVariable(line, i, tokens);
-            }
-
-            else if (Character.isDigit(c)) {
-                StringBuilder sb = new StringBuilder();
-                while (i < line.length() && Character.isDigit(line.charAt(i))) {
-                    sb.append(line.charAt(i));
-                    i++;
-                }
-                tokens.add(sb.toString());
-            }else if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') {
-                tokens.add(String.valueOf(c));
-                i++;
-            }
-
-            else if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
-                StringBuilder sb = new StringBuilder();
-                while (i < line.length() && "=+-*/%<>!&|;,".indexOf(line.charAt(i)) >= 0 ){
-                    sb.append(line.charAt(i));
-                    i++;
-                }
-                tokens.add(sb.toString());
-            }
-
-            else {
-                i++;
-            }
-        }
-        return tokens;
-    }
-
-    // symbol table'a alınacak.
-    public static ArrayList<String> extractTokensWithDots(String line) {
-        ArrayList<String> tokens = new ArrayList<>();
-        int i = 0;
-
-        while (i < line.length()) {
-            char c = line.charAt(i);
-
-            // identifier veya _ ile başlayanları yakala
-            if (Character.isLetter(c) || c == '_') {
-                // 1) temel identifier
-                StringBuilder ident = new StringBuilder();
-                while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
-                    ident.append(line.charAt(i));
-                    i++;
-                }
-                String base = ident.toString();
-                tokens.add(base);
-
-                // 2) full token: [ ... ] ve .segment zincirlerini ekle
-                StringBuilder full = new StringBuilder(base);
-                boolean extended = false;
-                boolean keepGoing = true;
-
-                while (keepGoing && i < line.length()) {
-                    char ch = line.charAt(i);
-
-                    if (ch == '[') {
-                        extended = true;
-                        // köşeli parantezli index(ler)i olduğu gibi full'e ekle (basit dengeleme ile)
-                        int depth = 0;
-                        do {
-                            char cc = line.charAt(i);
-                            full.append(cc);
-                            if (cc == '[') depth++;
-                            else if (cc == ']') depth--;
-                            i++;
-                            if (i >= line.length()) break;
-                        } while (depth > 0);
-                    } else if (ch == '.') {
-                        extended = true;
-                        full.append(ch);
-                        i++;
-                        // nokta sonrası boşlukları at
-                        while (i < line.length() && Character.isWhitespace(line.charAt(i))) i++;
-                        // nokta sonrası yeni identifier bekliyoruz
-                        StringBuilder seg = new StringBuilder();
-                        while (i < line.length() && (Character.isLetterOrDigit(line.charAt(i)) || line.charAt(i) == '_')) {
-                            char cc = line.charAt(i);
-                            full.append(cc);
-                            seg.append(cc);
-                            i++;
-                        }
-                        // seg yoksa zincir bitmiş say
-                        if (seg.length() == 0) keepGoing = false;
-                    } else {
-                        keepGoing = false;
-                    }
-                }
-
-                if (extended) {
-                    tokens.add(full.toString());
-                }
-                continue;
-            }
-
-            if (Character.isDigit(c)) {
-                StringBuilder sb = new StringBuilder();
-                while (i < line.length() && Character.isDigit(line.charAt(i))) {
-                    sb.append(line.charAt(i));
-                    i++;
-                }
-                tokens.add(sb.toString());
-                continue;
-            }
-
-            if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') {
-                tokens.add(String.valueOf(c));
-                i++;
-                continue;
-            }
-
-            if ("=+-*/%<>!&|;,".indexOf(c) >= 0) {
-                StringBuilder sb = new StringBuilder();
-                while (i < line.length() && "=+-*/%<>!&|;,".indexOf(line.charAt(i)) >= 0) {
-                    sb.append(line.charAt(i));
-                    i++;
-                }
-                tokens.add(sb.toString());
-                continue;
-            }
-
-            i++;
-        }
-        return tokens;
-    }
 
     private String constructAST(String parent,
                                 Graph graph,
@@ -356,7 +211,7 @@ public class Assessment {
                 lineMap.put(i + 1, lines[i]);
             }
 
-            ArrayList<Pair<Integer, LineType>> block = convertFromCodeBlock(codeBlock);
+            ArrayList<Pair<Integer, LineType>> block = SymbolTable.convertFromCodeBlock(codeBlock);
             if (block.isEmpty()) return;
 
             String parent = "start";
@@ -384,140 +239,6 @@ public class Assessment {
 
 
 
-    /**
-     * Determines the type of given line and returns it as a LineType.
-     * @param line
-     * @return types in that line as arraylist
-     */
-
-    // symbol table'a eklenecek
-    private static ArrayList<LineType> getTypes(String line) {
-        //updated
-        ArrayList<LineType> types = new ArrayList<>();
-        ArrayList<String> list= extractTokens(line);
-        if (list.contains("}")) {
-            types.add(LineType.CLOSE);
-        }
-        if (list.contains("else")) {
-            if (list.contains("if")) {
-                types.add(LineType.ELSE_IF);
-            } else {
-                types.add(LineType.ELSE);
-            }
-        } else if (list.contains("if") && list.contains("(")) {
-            types.add(LineType.IF);
-        } else if (list.contains("for") && list.contains("(")) {
-            types.add(LineType.FOR);
-        } else if (list.contains("while") && list.contains("(")) {
-            types.add(LineType.WHILE);
-        } else {
-            if (types.isEmpty()) {
-                types.add(LineType.STATEMENT);
-            }
-        }
-        return types;
-    }
-
-
-    /**
-     *
-     * @param codeBlock
-     * @return
-     */
-
-    // bunu bir object yapısına dönüştürmemiz gerekiyor.
-    // ArrayList<Pair<Integer, LineType>> yapısını
-    public static ArrayList<Pair<Integer, LineType>> convertFromCodeBlock(String codeBlock) {
-        ArrayList<Pair<Integer, LineType>> current = new ArrayList<>();
-
-        String[] lines = codeBlock.split("\n");
-
-        for (int j = 0; j < lines.length; j++) {
-            String line = lines[j].trim();
-            //updated
-            // BU KISIM FARKLI!! BURADA HATA MI VAR BAK!!
-            if (line.isEmpty()
-                    || line.startsWith("/")
-                    || line.startsWith("*")
-                    || line.startsWith("*/")) {
-                continue;
-            }
-
-            int lineNumber = j + 1;
-            ArrayList<LineType> lineTypes = getTypes(line);
-
-            int i = 0;
-            if (lineTypes.size() > 1) {
-                i++;
-            }
-
-            for (LineType type : lineTypes) {
-                current.add(new Pair<>(lineNumber, type));
-            }
-
-            // Blok başlıyorsa
-            LineType type = lineTypes.get(i);
-            if (type == LineType.FOR ||
-                    type == LineType.IF ||
-                    type == LineType.WHILE ||
-                    type == LineType.ELSE ||
-                    type == LineType.ELSE_IF) {
-
-                boolean nextIsBrace = (j + 1 < lines.length) && lines[j + 1].trim().equals("{");
-                boolean hasBraceOnLine = line.contains("{");
-                boolean hasSemicolon = line.contains(";");
-
-                if (nextIsBrace) {
-                    j++; // Süslü parantez satırını atla
-                } else if (!hasBraceOnLine && !hasSemicolon) {
-                    // Süslü parantez de noktalı virgül de yoksa otomatik gövde ekle
-                    current.add(new Pair<>(lineNumber + 1, LineType.STATEMENT));
-                    current.add(new Pair<>(lineNumber + 1, LineType.CLOSE));
-                }
-            }
-        }
-
-        // Son blogun süslü parantez dengesi kontrolü
-        if (check(current)) {
-            if (!current.isEmpty() && current.get(current.size() - 1).getValue() == LineType.CLOSE) {
-                current.remove(current.size() - 1);
-            }
-        }
-
-
-        return current;
-    }
-    /**
-     *Checks whether the brackets are balanced, i.e., whether constructs like if {} are properly closed.
-     * @param last
-     * @return boolean - whether the brackets are balanced
-     */
-
-    // bunu da o nesnenin bir methodu olarak yazacağız.
-    // ArrayList<Pair<Integer, LineType>>
-    private static boolean check(ArrayList<Pair<Integer, LineType>> last) {
-        // Opened blocks are stored here (LIFO logic)
-        Stack<LineType> stack = new Stack<>();
-
-        // This loops through each line inside a block
-        for (Pair<Integer, LineType> pair : last) {
-
-            // If it's a closing block, the stack should be empty afterwards; if so, return true
-            if (pair.getValue().equals(LineType.CLOSE)) {
-                if (stack.isEmpty()) {
-                    return true;
-                }
-                stack.pop();
-
-                // If it's not a closing block, but an opening one, add a new block to the stack
-            } else if (pair.getValue().equals(LineType.ELSE) || pair.getValue().equals(LineType.ELSE_IF) || pair.getValue().equals(LineType.IF) || pair.getValue().equals(LineType.FOR) || pair.getValue().equals(LineType.WHILE)) {
-                stack.add(pair.getValue());
-            }
-        }
-        // After all lines are processed, if there are still unclosed blocks, it's an error
-        return !stack.isEmpty();
-    }
-
 
     // type to string methodu. ve yardımcı methodlar
     // construct methodu her satıra karşılık gelen line type'ı graph yapısına ekler
@@ -526,7 +247,7 @@ public class Assessment {
         String body = "[BODY] (Line " + j + ")";
 
         if (lineType.equals(LineType.IF) || lineType.equals(LineType.ELSE_IF)) {
-            String conditionContent = extractConditionType(line);
+            String conditionContent = SymbolTable.extractConditionType(line);
             String condition = "[CONDITION] " + conditionContent + " (Line " + j + ")";
             String head = "[" + lineType + "] (Line " + j + ")";
 
@@ -540,7 +261,7 @@ public class Assessment {
             graph.put(head, body);
 
         } else if (lineType.equals(LineType.WHILE) || lineType.equals(LineType.FOR)) {
-            String conditionContent = extractConditionType(line);
+            String conditionContent = SymbolTable.extractConditionType(line);
             String head = "[" + lineType + "] (Line " + j + ")";
             String condition = "[CONDITION] " + conditionContent + " (Line " + j + ")";
 
@@ -550,17 +271,6 @@ public class Assessment {
         }
 
         return body;
-    }
-
-
-    // her satırın parantez içini kırpıp alıyor  - koşulu yani.
-    // symbol table'a eklenecek
-    private static String extractConditionType(String line) {
-        try {
-            return line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")).trim();
-        } catch (Exception e) {
-            return "UNKNOWN_CONDITION";
-        }
     }
 
 
@@ -611,34 +321,6 @@ public class Assessment {
     }
 
 
-    // satır numaralarıyla birlikte girilen stringin satırlarını bir hash map içine koyar.
-    // ortak method content ve type için.
-    private static HashMap<Integer, String> createMapFromString(String input) {
-        HashMap<Integer, String> map = new HashMap<>();
-        String[] lines = input.split("\n");
-
-        for (int i = 0; i < lines.length; i++) {
-            map.put(i + 1, lines[i]);
-        }
-
-        return map;
-    }
-
-    //wrapper method
-    /// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    public static ArrayList<ArrayList<Pair<Integer, LineType>>> convertFromString(String codeBlock) {
-        ArrayList<ArrayList<Pair<Integer, LineType>>> result = new ArrayList<>();
-
-        ArrayList<Pair<Integer, LineType>> singleBlock = convertFromCodeBlock(codeBlock);
-
-        if (!singleBlock.isEmpty()) {
-            result.add(singleBlock);
-        }
-
-        return result;
-    }
-
-
     // graph'a eklenicek tekrar
     private static String construct(String parent,
                                     Graph graph,
@@ -650,7 +332,7 @@ public class Assessment {
         String head = lineContent.trim() + " (Line " + lineNo + ")";
 
         if (lineType == LineType.IF || lineType == LineType.ELSE_IF) {
-            String cond = "[CONDITION] " + extractCondition(lineContent) + " (Line " + lineNo + ")";
+            String cond = "[CONDITION] " + SymbolTable.extractCondition(lineContent) + " (Line " + lineNo + ")";
             graph.put(parent, head);
             graph.put(head, cond);                // sadece CONDITION çocuğu
             return head;                          // <-- solve()’a geri head dönüyoruz
@@ -660,7 +342,7 @@ public class Assessment {
             return head;                          // ELSE’in altına doğrudan statement’lar bağlanacak
         }
         if (lineType == LineType.WHILE || lineType == LineType.FOR) {
-            String cond = "[CONDITION] " + extractCondition(lineContent) + " (Line " + lineNo + ")";
+            String cond = "[CONDITION] " + SymbolTable.extractCondition(lineContent) + " (Line " + lineNo + ")";
             graph.put(parent, head);
             graph.put(head, cond);
             return head;
@@ -668,14 +350,6 @@ public class Assessment {
         return head;      // teorik olarak buraya düşmez ama derleyici mutlu olur
     }
 
-
-    private static String extractCondition(String line) {
-        try {
-            return line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")).trim();
-        } catch (Exception e) {
-            return "UNKNOWN_CONDITION";
-        }
-    }
 
 
     // solve fonksiyonundaki döngünün devam edip etmeyeceğini () belirlemek için kullanılır.
@@ -736,8 +410,8 @@ public class Assessment {
         ArrayList<Graph> graphs = new ArrayList<>();
 
         try {
-            HashMap<Integer, String> map = createMapFromString(input);
-            ArrayList<ArrayList<Pair<Integer, LineType>>> lines = convertFromString(input);
+            HashMap<Integer, String> map = SymbolTable.createMapFromString(input);
+            ArrayList<ArrayList<Pair<Integer, LineType>>> lines = SymbolTable.convertFromString(input);
 
 
             for (ArrayList<Pair<Integer, LineType>> assessment : lines) {
@@ -920,7 +594,7 @@ public class Assessment {
         Graph graph = new Graph();
         cfgNodeLabels.clear();
         try {
-            ArrayList<Pair<Integer, LineType>> block = convertFromCodeBlock(codeBlock);
+            ArrayList<Pair<Integer, LineType>> block = SymbolTable.convertFromCodeBlock(codeBlock);
 
             HashMap<Integer, String> lineMap = new HashMap<>();
             String[] lines = codeBlock.split("\n");
@@ -945,13 +619,13 @@ public class Assessment {
 
     private Set<Pair<Integer, String>> getWrittenVars(String line, int lineNumber) {
         Set<Pair<Integer, String>> result = new HashSet<>();
-        ArrayList<String> tokens = extractTokens(line);
+        ArrayList<String> tokens = SymbolTable.extractTokens(line);
 
         for (int i = 0; i < tokens.size(); i++) {
             String token = tokens.get(i);
             if (token.equals("=") && i > 0) {
                 String left = tokens.get(i - 1);
-                if (isVariable(left)) {
+                if (SymbolTable.isVariable(left)) {
                     result.add(new Pair<>(lineNumber, left));
                 }
             }
@@ -962,7 +636,7 @@ public class Assessment {
 
     private Set<Pair<Integer, String>> getReadVars(String line, int lineNumber) {
         Set<Pair<Integer, String>> result = new HashSet<>();
-        ArrayList<String> tokens = extractTokensWithDots(line);
+        ArrayList<String> tokens = SymbolTable.extractTokensWithDots(line);
 
         boolean reading = false;
 
@@ -975,7 +649,7 @@ public class Assessment {
                 int li = i - 1;
                 while (li >= 0) {
                     String lt = tokens.get(li);
-                    if (isVariable(lt)) { result.add(new Pair<>(lineNumber, lt)); break; }
+                    if (SymbolTable.isVariable(lt)) { result.add(new Pair<>(lineNumber, lt)); break; }
                     if (lt.equals(";") || lt.equals("{") || lt.equals("}")) break;
                     li--;
                 }
@@ -983,7 +657,7 @@ public class Assessment {
                 int ri = i + 1;
                 while (ri < tokens.size()) {
                     String rt = tokens.get(ri);
-                    if (isVariable(rt)) { result.add(new Pair<>(lineNumber, rt)); break; }
+                    if (SymbolTable.isVariable(rt)) { result.add(new Pair<>(lineNumber, rt)); break; }
                     if (rt.equals(";") || rt.equals("{") || rt.equals("}")) break;
                     ri++;
                 }
@@ -999,7 +673,7 @@ public class Assessment {
                 int li = i - 1;
                 while (li >= 0) {
                     String lt = tokens.get(li);
-                    if (isVariable(lt)) { result.add(new Pair<>(lineNumber, lt)); break; }
+                    if (SymbolTable.isVariable(lt)) { result.add(new Pair<>(lineNumber, lt)); break; }
                     if (lt.equals(";") || lt.equals("{") || lt.equals("}")) break;
                     li--;
                 }
@@ -1020,7 +694,7 @@ public class Assessment {
                 reading = false;
             }
 
-            if (reading && isVariable(t)) {
+            if (reading && SymbolTable.isVariable(t)) {
                 result.add(new Pair<>(lineNumber, tokens.get(i)));
             }
         }
@@ -1042,17 +716,17 @@ public class Assessment {
                         cond = inside;
                     }
 
-                    ArrayList<String> condTokens = extractTokensWithDots(cond);
+                    ArrayList<String> condTokens = SymbolTable.extractTokensWithDots(cond);
                     for (int i = 0; i < condTokens.size(); i++) {
                         String ct = condTokens.get(i);
-                        if (isVariable(ct)) {
+                        if (SymbolTable.isVariable(ct)) {
                             result.add(new Pair<>(lineNumber, ct));
                         } else if (ct.equals("==") || ct.equals("!=")) {
                             // sol index - eşitliğin soluna bakıyoruz
                             int li = i - 1;
                             while (li >= 0) {
                                 String lt = condTokens.get(li); //left token
-                                if (isVariable(lt)) {
+                                if (SymbolTable.isVariable(lt)) {
                                     result.add(new Pair<>(lineNumber, lt));
                                     break;
                                 }
@@ -1065,7 +739,7 @@ public class Assessment {
                             int ri = i + 1;
                             while (ri < condTokens.size()) {
                                 String rt = condTokens.get(ri); //right token
-                                if (isVariable(rt)) {
+                                if (SymbolTable.isVariable(rt)) {
                                     result.add(new Pair<>(lineNumber, rt));
                                     break;
                                 }
@@ -1078,17 +752,17 @@ public class Assessment {
                     }
                 } else {
                     // if / while: tüm parantez içinden değişkenleri al
-                    ArrayList<String> condTokens = extractTokensWithDots(inside);
+                    ArrayList<String> condTokens = SymbolTable.extractTokensWithDots(inside);
                     for (int i = 0; i < condTokens.size(); i++) {
                         String ct = condTokens.get(i);
-                        if (isVariable(ct)) {
+                        if (SymbolTable.isVariable(ct)) {
                             result.add(new Pair<>(lineNumber, ct));
                         } else if (ct.equals("==") || ct.equals("!=")) {
                             // sol
                             int li = i - 1;
                             while (li >= 0) {
                                 String lt = condTokens.get(li);
-                                if (isVariable(lt)) { result.add(new Pair<>(lineNumber, lt)); break; }
+                                if (SymbolTable.isVariable(lt)) { result.add(new Pair<>(lineNumber, lt)); break; }
                                 if (lt.equals(";") || lt.equals("{") || lt.equals("}")) break;
                                 li--;
                             }
@@ -1096,7 +770,7 @@ public class Assessment {
                             int ri = i + 1;
                             while (ri < condTokens.size()) {
                                 String rt = condTokens.get(ri);
-                                if (isVariable(rt)) { result.add(new Pair<>(lineNumber, rt)); break; }
+                                if (SymbolTable.isVariable(rt)) { result.add(new Pair<>(lineNumber, rt)); break; }
                                 if (rt.equals(";") || rt.equals("{") || rt.equals("}")) break;
                                 ri++;
                             }
@@ -1178,24 +852,6 @@ public class Assessment {
     }
 
 
-//doubly linked list ve linked list ekle
-
-    private static final Set<String> JAVA_KEYWORDS = Set.of(
-            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
-            "class", "const", "continue", "default", "do", "double", "else", "enum",
-            "extends", "final", "finally", "float", "for", "goto", "if", "implements",
-            "import", "instanceof", "int", "interface", "long", "native", "new", "package",
-            "private", "protected", "public", "return", "short", "static", "strictfp",
-            "super", "switch", "synchronized", "this", "throw", "throws", "transient",
-            "try", "void", "volatile", "while", "null", "true", "false", "head", "tail", "pop", "push"
-    );
-
-
-    private boolean isVariable(String token) {
-        return token.matches("[a-zA-Z_][a-zA-Z0-9_]*") &&
-                !JAVA_KEYWORDS.contains(token);
-    }
-
     public void toGraphviz(String directory) {
         try {
             if (abstractSyntaxTree != null) {
@@ -1213,15 +869,6 @@ public class Assessment {
         }
     }
 
-
-    private static final Set<String> JAVA_TYPES = Set.of(
-            "boolean", "bool", "byte", "char",  "double", "float", "int", "long", "short", "LinkedList" ,"ArrayList",
-            "Stack", "Queue",  "DoublyList", "DoublyLinkedList", "Element", "Node", "DoublyNode", "Str"
-    );
-
-    private boolean isTypeToken(String t) {
-        return t != null && JAVA_TYPES.contains(t);
-    }
 
     private void addIfAbsent(Map<String, Variable> vars, String name, String type) {
         if (!vars.containsKey(name)) {
@@ -1278,14 +925,14 @@ public class Assessment {
                     if (parts.length > 0) {
                         init = parts[0].trim();
                     }
-                    ArrayList<String> itok = extractTokensWithDots(init);
+                    ArrayList<String> itok = SymbolTable.extractTokensWithDots(init);
                     // for each olan for döngüsü için
                     if (init.contains(":") && itok.size() >= 2
-                            && isTypeToken(itok.get(0)) && isVariable(itok.get(1))) {
+                            && SymbolTable.isTypeToken(itok.get(0)) && SymbolTable.isVariable(itok.get(1))) {
                         addIfAbsent(vars, itok.get(1), itok.get(0));   // q : Queue
                     }
                     // klasik for init: Type a=0, b=1, c[];
-                    else if (!itok.isEmpty() && isTypeToken(itok.get(0))) {
+                    else if (!itok.isEmpty() && SymbolTable.isTypeToken(itok.get(0))) {
                         String baseType = itok.get(0);
                         int i = 1;
 
@@ -1296,7 +943,7 @@ public class Assessment {
                         }
 
                         while (i < itok.size()) {
-                            if (i < itok.size() && isVariable(itok.get(i))) {
+                            if (i < itok.size() && SymbolTable.isVariable(itok.get(i))) {
                                 String name = itok.get(i); i++;
 
                                 String localSuffix = typeSuffix;
@@ -1335,10 +982,10 @@ public class Assessment {
             }
 
             // Array tanımlama  T [ ] name = ...
-            ArrayList<String> tok = extractTokensWithDots(line);
+            ArrayList<String> tok = SymbolTable.extractTokensWithDots(line);
 
             // Çoklu bildirim desteği (Type a=0, b, c[] = foo();) ---
-            if (!tok.isEmpty() && isTypeToken(tok.get(0))) {
+            if (!tok.isEmpty() && SymbolTable.isTypeToken(tok.get(0))) {
                 String baseType = tok.get(0);
                 int i = 1;
 
@@ -1351,7 +998,7 @@ public class Assessment {
 
                 while (i < tok.size()) {
                     // Ad
-                    if (i < tok.size() && isVariable(tok.get(i))) {
+                    if (i < tok.size() && SymbolTable.isVariable(tok.get(i))) {
                         String name = tok.get(i);
                         i++;
 
@@ -1390,19 +1037,19 @@ public class Assessment {
 
 
             if (    tok.size() >= 5
-                    && isTypeToken(tok.get(0))
+                    && SymbolTable.isTypeToken(tok.get(0))
                     && "[".equals(tok.get(1))
                     && "]".equals(tok.get(2))
-                    && isVariable(tok.get(3))
+                    && SymbolTable.isVariable(tok.get(3))
                     && "=".equals(tok.get(4))) {
                 addIfAbsent(vars, tok.get(3), tok.get(0) + "[]");
             }
 
             // Pointer tanımlama  T * name = ...
             if (tok.size() >= 4
-                    && isTypeToken(tok.get(0))
+                    && SymbolTable.isTypeToken(tok.get(0))
                     && "*".equals(tok.get(1))
-                    && isVariable(tok.get(2))
+                    && SymbolTable.isVariable(tok.get(2))
                     && "=".equals(tok.get(3))) {
                 addIfAbsent(vars, tok.get(2), tok.get(0) + "*");
             }
@@ -1429,7 +1076,7 @@ public class Assessment {
             // - if/while/for koşullarındaki değişkenleri
             // - this, null, true/false, left.data, arr[i] vb. olan tokenları otomatik eleyerek toplar
             for (String t : tok) {
-                if (isVariable(t) && !isTypeToken(t)) {   // <-- type token'larını at
+                if (SymbolTable.isVariable(t) && !SymbolTable.isTypeToken(t)) {   // <-- type token'larını at
                     addIfAbsent(vars, t, null);
                 }
             }
@@ -1542,7 +1189,7 @@ public class Assessment {
             String rawS = studentLines[sIdx].trim();
             if (rawS.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
 
-            ArrayList<String> sTokens = filterTokens(extractTokensWithDots(rawS));
+            ArrayList<String> sTokens = filterTokens(SymbolTable.extractTokensWithDots(rawS));
             if (sTokens.isEmpty()) continue;
 
             boolean sElse = !sTokens.contains("if") &&
@@ -1557,7 +1204,7 @@ public class Assessment {
                 String rawR = refLines[rIdx].trim();
                 if (rawR.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
 
-                ArrayList<String> rTokens = filterTokens(extractTokensWithDots(rawR));
+                ArrayList<String> rTokens = filterTokens(SymbolTable.extractTokensWithDots(rawR));
                 if (rTokens.isEmpty()) continue;
 
                 boolean rElse = !rTokens.contains("if") &&
@@ -1571,8 +1218,8 @@ public class Assessment {
                     String ts = sTokens.get(i);
                     String tr = rTokens.get(j);
 
-                    boolean tsVar = isVariable(ts) || studentVars.contains(ts);
-                    boolean trVar = isVariable(tr) || refVars.contains(tr);
+                    boolean tsVar = SymbolTable.isVariable(ts) || studentVars.contains(ts);
+                    boolean trVar = SymbolTable.isVariable(tr) || refVars.contains(tr);
 
                     if (tsVar && trVar) { i++; j++; continue; }
                     if (!tsVar && !trVar && ts.equals(tr)) { i++; j++; continue; }

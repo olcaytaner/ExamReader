@@ -1622,7 +1622,7 @@ public class Assessment {
 
     public void toGraphvizWithHighlights(String directory, List<Pair<Integer, Integer>> matchedLines) {
         try {
-            // 🔹 matchMap'i listeye çeviriyoruz (sadece öğrenci satırlarını alıyoruz)
+            // matchMap'i listeye çeviriyoruz (sadece öğrenci satırlarını alıyoruz)
             List<Integer> highlightLines = new ArrayList<>();
             for (Pair<Integer, Integer> p : matchedLines) {
                 if (p != null && p.getKey() != null) {
@@ -1630,7 +1630,7 @@ public class Assessment {
                 }
             }
 
-            // 🔥 AST, CFG, DDG renklendirilmiş olarak kaydediliyor
+
             if (abstractSyntaxTree != null) {
                 abstractSyntaxTree.saveGraphviz(directory, "ast_highlighted", "AST_Highlighted", astNodeLabels, highlightLines);
             }

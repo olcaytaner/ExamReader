@@ -216,4 +216,51 @@ public class Graph {
         }
     }
 
+    public void saveGraphvizWithColorMapping(
+            String directory,
+            String fileName,
+            String graphName,
+            Map<String, String> nodeLabels,
+            Map<Integer, String> lineColorMap) throws IOException {
+
+        File outFile = new File(directory, fileName + ".dot");
+
+        try (PrintWriter writer = new PrintWriter(outFile)) {
+            writer.println("digraph \"" + escapeDot(graphName) + "\" {");
+            writer.println("  node [shape=box, style=filled, fontname=\"Helvetica\"];");
+
+            // Kenarları çiz
+            for (Map.Entry<String, HashSet<String>> e : graph.entrySet()) {
+                String from = e.getKey();
+                for (String to : e.getValue()) {
+                    writer.printf("  \"%s\" -> \"%s\";%n",
+                            escapeDot(from),
+                            escapeDot(to));
+                }
+            }
+
+            // Node'ları renkleriyle birlikte çiz
+            for (Map.Entry<String, String> entry : nodeLabels.entrySet()) {
+                String nodeId = entry.getKey();
+                String label = entry.getValue();
+
+                // Node'un satır numarasını çıkar
+                Integer lineNo = extractLineNo(nodeId, label);
+
+                // RefCode'dan gelen rengi bul
+                String color = "white";
+
+                if (lineNo != null && lineColorMap.containsKey(lineNo)) {
+                    color = lineColorMap.get(lineNo);
+                }
+
+                writer.printf("  \"%s\" [label=\"%s\", style=filled, fillcolor=\"%s\"];%n",
+                        escapeDot(nodeId),
+                        escapeDot(label),
+                        color);
+            }
+
+            writer.println("}");
+        }
+    }
 }

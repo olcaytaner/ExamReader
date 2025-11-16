@@ -5,11 +5,11 @@ import java.util.ArrayList;
 
 public class Main {
     public static void main(String[] args) throws IOException {
-        String directory ="C:\\Users\\nermi\\Desktop\\hehe";
+         /* String directory ="C:\\Users\\nermi\\Desktop\\hehe";
         Exam exam = new Exam(directory,"Midterm1");
         exam.exportGradingPNGsColored("C:\\Users\\nermi\\Desktop\\hehe.pngs","idc");
 
-        /*
+
         StudentCode s = new StudentCode(false,"s033247", 1, "C:\\Users\\nermi\\Dropbox\\Midterm1-Annotated (1)\\Q1\\S024527.txt");
         Assessment a = new Assessment(4,"", false, ""," while(p1 !=null && p2 !=null){\n" +
                 "            if(p1.getData()< p2.getData()){\n" +
@@ -59,5 +59,7 @@ public class Main {
 
          */
 
+        Exam exam1 = new Exam("C:\\Users\\Mujgan\\Dropbox\\Midterm1-Annotated (1)", "ExamName");
+        exam1.exportGradingPNGsWithRefColors("C:\\Users\\Mujgan\\Desktop\\test2", "A");
     }
 }

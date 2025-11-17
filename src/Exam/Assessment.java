@@ -1,11 +1,9 @@
 package Exam;
 
-
-import Graph.Graph;
+import Graph.*;
 import Graph.LineType;
 import Graph.Pair;
 import Graph.SymbolTable;
-
 import java.io.FileNotFoundException;
 import java.util.*;
 
@@ -16,7 +14,7 @@ public class Assessment {
     private final String violationString;
     private final String codeBlock;
     private Code code;
-    private Graph abstractSyntaxTree;
+    private ASTGraph abstractSyntaxTree;
     private Graph controlFlowGraph;
     private Graph dataDependencyGraph;
 
@@ -24,17 +22,11 @@ public class Assessment {
     private Map<String, String> cfgNodeLabels = new HashMap<>();
     private Map<String, String> ddgNodeLabels = new HashMap<>();
 
-    private boolean astFailed = false;
     private boolean cfgFailed = false;
     private boolean ddgFailed = false;
 
-    public boolean isAstFailed() { return astFailed; }
     public boolean isCfgFailed() { return cfgFailed; }
     public boolean isDdgFailed() { return ddgFailed; }
-
-    public Map<String, String> getAstNodeLabels() {
-        return astNodeLabels;
-    }
 
     public Map<String, String> getCfgNodeLabels() {
         return cfgNodeLabels;
@@ -67,12 +59,9 @@ public class Assessment {
     // generate cfg
     // print methoduyla exam directory test.
 
-
-
-    public Graph getAbstractSyntaxTree() {
+    public ASTGraph getAbstractSyntaxTree() {
         return abstractSyntaxTree;
     }
-
     public Graph getControlFlowGraph() {
         return controlFlowGraph;
     }
@@ -81,7 +70,25 @@ public class Assessment {
         return dataDependencyGraph;
     }
 
+    public static ArrayList<Graph> generateGraphsFromStringContent(String input) {
+        ArrayList<ASTGraph> astGraphs = ASTGraph.generateGraphsFromStringContent(input);
+        return new ArrayList<>(astGraphs);
+    }
 
+    //-----new ast methods - short adapted version -----
+    private void generateASTGraph() {
+        abstractSyntaxTree = new ASTGraph();
+        abstractSyntaxTree.generateFromCodeBlock(codeBlock);
+    }
+    public boolean isAstFailed() {
+        return abstractSyntaxTree != null && abstractSyntaxTree.isGenerationFailed();
+    }
+
+    public Map<String, String> getAstNodeLabels() {
+        return abstractSyntaxTree != null ? abstractSyntaxTree.getNodeLabels() : new HashMap<>();
+    }
+
+    //----------------------------------------------
     public String getCodeBlock() {
         return codeBlock;
     }
@@ -109,135 +116,6 @@ public class Assessment {
     public void setCode(Code code) {
         this.code = code;
     }
-
-
-    private String constructAST(String parent,
-                                Graph graph,
-                                String line,
-                                int lineNumber,
-                                LineType lineType,
-                                Map<String, String> nodeLabels) {
-
-        String fullLine = line.trim();
-        String nodeId = lineType + "-" + lineNumber;
-        graph.put(parent, nodeId);
-        nodeLabels.put(nodeId, fullLine);
-
-        if (lineType.equals(LineType.IF) || lineType.equals(LineType.ELSE_IF)) {
-            String condContent = line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")).trim();
-            String condId = "cond-" + lineNumber;
-            graph.put(nodeId, condId);
-            nodeLabels.put(condId, condContent);
-            return condId;
-
-        } else if (lineType.equals(LineType.ELSE)) {
-            return nodeId;
-
-        } else if (lineType.equals(LineType.WHILE) || lineType.equals(LineType.FOR)) {
-            String condContent = line.substring(line.indexOf("(") + 1, line.lastIndexOf(")")).trim();
-            String condId = "cond-" + lineNumber;
-            graph.put(nodeId, condId);
-            nodeLabels.put(condId, condContent);
-
-            String bodyId = "body-" + lineNumber;
-            graph.put(nodeId, bodyId);
-            nodeLabels.put(bodyId, "body");
-            return bodyId;
-        }
-
-        return nodeId;
-    }
-
-
-
-    private static boolean conditionAST(int j, ArrayList<Pair<Integer, LineType>> lines) {
-        if (lines.get(j).getValue().equals(LineType.CLOSE)) {
-            return j + 1 != lines.size() && (lines.get(j + 1).getValue().equals(LineType.ELSE_IF) || lines.get(j + 1).getValue().equals(LineType.ELSE));
-        }
-        return true;
-    }
-
-    private int solveAST(int j,
-                         ArrayList<Pair<Integer, LineType>> lines,
-                         Graph graph,
-                         String parent,
-                         HashMap<Integer, String> map) {
-
-        int lineNumber = lines.get(j).getKey();
-        LineType type = lines.get(j).getValue();
-
-        String body = constructAST(
-                parent,
-                graph,
-                map.get(lineNumber),   // satır içeriği
-                lineNumber,
-                type,
-                astNodeLabels
-        );
-
-        j++;
-        while (j < lines.size() && conditionAST(j, lines)) {
-            if (lines.get(j).getValue().equals(LineType.CLOSE)) {
-                j++;
-                continue;
-            }
-            LineType cur = lines.get(j).getValue();
-            if (cur.equals(LineType.STATEMENT)) {
-                int stmtLine = lines.get(j).getKey();
-                String nodeId = cur + "-" + stmtLine;
-                graph.put(body, nodeId);
-                astNodeLabels.put(nodeId, map.get(stmtLine).trim());
-                j++;
-            }
-            else if (cur.equals(LineType.ELSE) || cur.equals(LineType.ELSE_IF)) {
-                j = solveAST(j, lines, graph, parent, map);
-            } else {
-                j = solveAST(j, lines, graph, body, map);
-                j++;
-            }
-        }
-        return j;
-    }
-
-
-
-    private void generateASTGraph() {
-        Graph graph = new Graph();
-        astNodeLabels.clear();
-        try {
-            HashMap<Integer, String> lineMap = new HashMap<>();
-            String[] lines = codeBlock.split("\n");
-            for (int i = 0; i < lines.length; i++) {
-                lineMap.put(i + 1, lines[i]);
-            }
-
-            ArrayList<Pair<Integer, LineType>> block = SymbolTable.convertFromCodeBlock(codeBlock);
-            if (block.isEmpty()) return;
-
-            String parent = "start";
-            astNodeLabels.put(parent, "start");
-
-            for (int j = 0; j < block.size(); j++) {
-                LineType type = block.get(j).getValue();
-                int lineNum = block.get(j).getKey();
-
-                if (type.equals(LineType.STATEMENT)) {
-                    String nodeId = LineType.STATEMENT + "-" + lineNum;
-                    graph.put(parent, nodeId);
-                    astNodeLabels.put(nodeId, lineMap.get(lineNum).trim());
-                } else {
-                    j = solveAST(j, block, graph, parent, lineMap);
-                }
-            }
-        } catch (Exception e) {
-            astFailed = true;
-            System.err.println("Cannot generate AST: " + e.getMessage());
-        }
-
-        this.abstractSyntaxTree = graph;
-    }
-
-
 
 
     // type to string methodu. ve yardımcı methodlar
@@ -404,38 +282,6 @@ public class Assessment {
         }
         return j;
     }
-
-
-    public static ArrayList<Graph> generateGraphsFromStringContent(String input) {
-        ArrayList<Graph> graphs = new ArrayList<>();
-
-        try {
-            HashMap<Integer, String> map = SymbolTable.createMapFromString(input);
-            ArrayList<ArrayList<Pair<Integer, LineType>>> lines = SymbolTable.convertFromString(input);
-
-
-            for (ArrayList<Pair<Integer, LineType>> assessment : lines) {
-                Graph g = new Graph();
-                String parent = "start";
-
-                for (int j = 0; j < assessment.size(); j++) {
-                    if (assessment.get(j).getValue() == LineType.STATEMENT) {
-                        int ln = assessment.get(j).getKey();
-                        g.put(parent, map.get(ln).trim() + " (Line " + ln + ")");
-                    } else {
-                        j = solve(j, assessment, g, parent, map);
-                    }
-                }
-
-                graphs.add(g.clone());
-            }
-        } catch (Exception e) {
-            System.out.println("String input could not be processed.");
-        }
-
-        return graphs;
-    }
-
 
     public static ArrayList<ArrayList<Graph>> generateGraphsContent(String codeBlock) throws FileNotFoundException {
         ArrayList<ArrayList<Graph>> graphs = new ArrayList<>();
@@ -851,11 +697,10 @@ public class Assessment {
         }
     }
 
-
     public void toGraphviz(String directory) {
         try {
             if (abstractSyntaxTree != null) {
-                abstractSyntaxTree.saveGraphviz(directory, "ast", "AST", astNodeLabels);
+                abstractSyntaxTree.saveGraphviz(directory, "ast", "AST", abstractSyntaxTree.getNodeLabels());
             }
             if (controlFlowGraph != null) {
                 controlFlowGraph.saveGraphviz(directory, "cfg", "CFG", cfgNodeLabels);
@@ -868,7 +713,6 @@ public class Assessment {
             System.err.println("Graphviz çıktısı alınırken hata: " + e.getMessage());
         }
     }
-
 
     private void addIfAbsent(Map<String, Variable> vars, String name, String type) {
         if (!vars.containsKey(name)) {
@@ -1034,8 +878,6 @@ public class Assessment {
                 }
             }
 
-
-
             if (    tok.size() >= 5
                     && SymbolTable.isTypeToken(tok.get(0))
                     && "[".equals(tok.get(1))
@@ -1143,6 +985,7 @@ public class Assessment {
         List<Pair<Integer, Integer>> matches = compareLines(studentLines, refLines, studentVars, refVars);
         return new MatchResult(Collections.emptyMap(), matches);
     }
+
     private ArrayList<String> filterTokens(ArrayList<String> tokens) {
         ArrayList<String> normalized = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -1157,7 +1000,6 @@ public class Assessment {
             if (token.startsWith("this.")) {
                 token = token.substring(5);
             }
-
 
             if (token.contains(".get")) {
                 int idx = token.indexOf(".get");
@@ -1176,10 +1018,6 @@ public class Assessment {
 
         return normalized;
     }
-
-
-
-
 
     private List<Pair<Integer, Integer>> compareLines(String[] studentLines, String[] refLines, Set<String> studentVars, Set<String> refVars) {
         List<Pair<Integer, Integer>> matches = new ArrayList<>();
@@ -1248,7 +1086,6 @@ public class Assessment {
         int bestMatchCount = 0;  // Şu ana kadar bulunan en fazla eşleşen satır sayısı
         int bestIndex = -1;      // En iyi eşleşen assessment'ın index'i (-1 = hiç eşleşme yok)
 
-
         for (int i = 0; i < refCode.getAssessments().size(); i++) {
 
             Assessment refAssessment = refCode.getAssessments().get(i);
@@ -1277,9 +1114,8 @@ public class Assessment {
                 }
             }
 
-
             if (abstractSyntaxTree != null) {
-                abstractSyntaxTree.saveGraphviz(directory, "ast_highlighted", "AST_Highlighted", astNodeLabels, highlightLines);
+                abstractSyntaxTree.saveGraphviz(directory, "ast_highlighted", "AST_Highlighted", abstractSyntaxTree.getNodeLabels(), highlightLines);
             }
             if (controlFlowGraph != null) {
                 controlFlowGraph.saveGraphviz(directory, "cfg_highlighted", "CFG_Highlighted", cfgNodeLabels, highlightLines);
@@ -1287,14 +1123,10 @@ public class Assessment {
             if (dataDependencyGraph != null) {
                 dataDependencyGraph.saveGraphviz(directory, "ddg_highlighted", "DDG_Highlighted", ddgNodeLabels, highlightLines);
             }
-
-
         } catch (Exception e) {
             System.err.println("Graphviz error: " + e.getMessage());
             e.printStackTrace();
         }
     }
-
-
 
 }

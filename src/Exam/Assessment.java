@@ -945,24 +945,7 @@ public class Assessment {
         return new LinkedHashSet<>(vars.values());
     }
 
-    public static class MatchResult {
-        public Map<String, String> mapping;
-        public List<Pair<Integer, Integer>> matchedLines;
-
-        // Sadece eşleşen satırlar için constructor
-        public MatchResult(List<Pair<Integer, Integer>> matchedLines) {
-            this.mapping = Collections.emptyMap();
-            this.matchedLines = matchedLines;
-        }
-
-        // Mapping ile birlikte eşleşen satırlar için constructor
-        public MatchResult(Map<String, String> mapping, List<Pair<Integer, Integer>> matchedLines) {
-            this.mapping = mapping;
-            this.matchedLines = matchedLines;
-        }
-    }
-
-    public MatchResult calculateBestMatch(Assessment other) {
+    public List<Pair<Integer, Integer>> calculateBestMatch(Assessment other) {
         Set<Variable> studentVarsSet = getAllVariables();
         Set<Variable> refVarsSet = other.getAllVariables();
 
@@ -983,15 +966,16 @@ public class Assessment {
 
         // değişkenleri isimden bağımsız eşit sayıp satırları doğrudan karşılaştır
         List<Pair<Integer, Integer>> matches = compareLines(studentLines, refLines, studentVars, refVars);
-        return new MatchResult(Collections.emptyMap(), matches);
+        return matches;
     }
 
     private ArrayList<String> filterTokens(ArrayList<String> tokens) {
         ArrayList<String> normalized = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
 
         for (String token : tokens) {
+            if (token == null) continue;
             token = token.trim();
+            if (token.isEmpty()) continue;
 
             // "this" tamamen sil
             if (token.equals("this")) continue;
@@ -1000,19 +984,61 @@ public class Assessment {
             if (token.startsWith("this.")) {
                 token = token.substring(5);
             }
+            // a[i], a[index] gibi array erişimlerini parçala
+            int lb = token.indexOf('[');
+            int rb = token.lastIndexOf(']');
+            if (lb > 0 && rb == token.length() - 1 && rb > lb + 1) {
+                String base   = token.substring(0, lb);      // "a"
+                String inside = token.substring(lb + 1, rb); // "i" veya "index"
 
+                if (!base.isEmpty()) {
+                    // Son eklenen token zaten 'a' ise tekrar ekleme
+                    if (normalized.isEmpty() || !normalized.get(normalized.size() - 1).equals(base)) {
+                        normalized.add(base);
+                    }
+                }
+                if (!inside.isEmpty()) {
+                    normalized.add(inside);    // i / index
+                }
+                // Köşeli parantezleri hiç eklemiyoruz
+                continue;
+            }
+
+
+            // current.getNext gibi yapıları tek token olarak normalize et
             if (token.contains(".get")) {
                 int idx = token.indexOf(".get");
-                token = token.substring(0, idx); // .get öncesi
+                String before = token.substring(0, idx);
+                String after = token.substring(idx + 4);
+
+                if (!after.isEmpty()) {
+                    String normalizedAfter = after;
+                    if (normalizedAfter.startsWith("get")
+                            && normalizedAfter.length() > 3
+                            && Character.isUpperCase(normalizedAfter.charAt(3))) {
+                        normalizedAfter = Character.toLowerCase(normalizedAfter.charAt(3)) + normalizedAfter.substring(4);
+                    } else if (!normalizedAfter.isEmpty() && Character.isUpperCase(normalizedAfter.charAt(0))) {
+                        normalizedAfter = Character.toLowerCase(normalizedAfter.charAt(0)) + normalizedAfter.substring(1);
+                    }
+
+                    if (!before.isEmpty()) {
+                        token = before + "." + normalizedAfter;
+                    } else {
+                        token = normalizedAfter;
+                    }
+                }
+            }
+
+            // getNext, getData gibi tokenları normalize et
+            if (token.startsWith("get") && token.length() > 3 && Character.isUpperCase(token.charAt(3))) {
+                token = Character.toLowerCase(token.charAt(3)) + token.substring(4);
             }
 
             // Eğer token sadece parantezse geç
             if (token.equals("(") || token.equals(")") || token.equals("{") || token.equals("}")) continue;
 
-            // Boş veya tekrar olan tokenları atla
-            if (!token.isEmpty() && !seen.contains(token)) {
+            if (!token.isEmpty()) {
                 normalized.add(token);
-                seen.add(token);
             }
         }
 
@@ -1021,26 +1047,36 @@ public class Assessment {
 
     private List<Pair<Integer, Integer>> compareLines(String[] studentLines, String[] refLines, Set<String> studentVars, Set<String> refVars) {
         List<Pair<Integer, Integer>> matches = new ArrayList<>();
-        boolean[] usedReferenceLine = new boolean[refLines.length];
+        boolean[] usedReferenceLine = new boolean[refLines.length]; //true olursa, o ref satırı tekrar kullanılmıyor (1 ref satırı = en fazla 1 eşleşme)
 
-        for (int sIdx = 0; sIdx < studentLines.length; sIdx++) {
-            String rawS = studentLines[sIdx].trim();
-            if (rawS.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
+        for (int stuIndex = 0; stuIndex < studentLines.length; stuIndex++) {
+            String rawS = studentLines[stuIndex]; //bu satırın ham hali
+            int sl = rawS.indexOf("//"); //bu string içinde "//" kaçıncı index’te başlıyor onu döner
+            if (sl >= 0) { //"//" yoksa, indexOf -1 döner
+                rawS = rawS.substring(0, sl); //"//" yoksa, substring ile "//" dan önceki kısmı alır
+            }
+            rawS = rawS.trim();
+            if (rawS.replaceAll("[\\s{}();,]", "").isEmpty()) continue;//boş / sadece süslü parantez satırlarını atla
 
-            ArrayList<String> sTokens = filterTokens(SymbolTable.extractTokensWithDots(rawS));
+            ArrayList<String> sTokens = filterTokens(SymbolTable.extractTokensWithDots(rawS));//["DoublyNode", "tmp", "=", "DoublyNode", "head", ";"] vb dönüyor
             if (sTokens.isEmpty()) continue;
 
-            boolean sElse = !sTokens.contains("if") &&
+            boolean sElse = !sTokens.contains("if") && 
                     sTokens.stream().allMatch(t -> t.equals("{") || t.equals("}") || t.equals("else"));
-            if (sElse) continue;
+            if (sElse) continue; // if içermiyor ve tüm satır sadece {, } veya else ise atla
 
-            int bestRef = -1;
+            int bestRef = -1; //eşleşme bulduğu ref indexini tutacak -1 ise eşleşme yok
 
-            for (int rIdx = 0; rIdx < refLines.length; rIdx++) {
-                if (usedReferenceLine[rIdx]) continue;
+            for (int refIndex = 0; refIndex < refLines.length; refIndex++) {
+                if (usedReferenceLine[refIndex]) continue;//daha önce kullanılmamış ref satırlanı deneyeceğiz
 
-                String rawR = refLines[rIdx].trim();
-                if (rawR.replaceAll("[\\s{}();,]", "").isEmpty()) continue;
+                String rawR = refLines[refIndex];
+                int rl = rawR.indexOf("//"); //yorum satırına kadar olan kısmı al
+                if (rl >= 0) {
+                    rawR = rawR.substring(0, rl);
+                }
+                rawR = rawR.trim();
+                if (rawR.replaceAll("[\\s{}();,]", "").isEmpty()) continue; //satırlar sadece whitespace karakterlerden oluşuyorsa atla
 
                 ArrayList<String> rTokens = filterTokens(SymbolTable.extractTokensWithDots(rawR));
                 if (rTokens.isEmpty()) continue;
@@ -1056,52 +1092,55 @@ public class Assessment {
                     String ts = sTokens.get(i);
                     String tr = rTokens.get(j);
 
-                    boolean tsVar = SymbolTable.isVariable(ts) || studentVars.contains(ts);
-                    boolean trVar = SymbolTable.isVariable(tr) || refVars.contains(tr);
+                    boolean tsVar = SymbolTable.isVariable(ts) || studentVars.contains(ts); //int "="  false döner
+                    boolean trVar = SymbolTable.isVariable(tr) || refVars.contains(tr); //variable varsa true döner
 
-                    if (tsVar && trVar) { i++; j++; continue; }
-                    if (!tsVar && !trVar && ts.equals(tr)) { i++; j++; continue; }
+                    if (tsVar && trVar) //her iki taraftaki token da değişkense, isimleri ne olursa olsun eşleşiyor
+                    {
+                        i++; j++;
+                        continue;
+                    }
+                    if (!tsVar && !trVar && ts.equals(tr)) // ikisinin de değişken olmayan ve aynı olduğu 
+                    { 
+                        i++; j++; 
+                        continue;
+                    }
+                    if (!tsVar && !trVar && ts.contains(".") && tr.contains(".")) //current.getNext → filter sonrası current.next’e dönüyor (suffixler aynıysa eşleşiyor)
+                    {
+                        int tstuIndex = ts.lastIndexOf('.'); //son "." indexi
+                        int trefIndex = tr.lastIndexOf('.');
+                        if (tstuIndex >= 0 && trefIndex >= 0) { //"." varsa iki kodda da
+                            String tsSuffix = ts.substring(tstuIndex + 1); //ts = "tmp.next" → tsSuffix = "next"
+                            String trSuffix = tr.substring(trefIndex + 1);
+                            if (!tsSuffix.isEmpty() && tsSuffix.equals(trSuffix))
+                            {
+                                i++; j++;
+                                continue;//eşleşmiş saydık diğer tokena geçtik
+                            }
+                        }
+                    }
 
-                    isMatch = false;
+                    isMatch = false; // eşleşme olmadı 
                     break;
                 }
 
+                if (isMatch && (i != sTokens.size() || j != rTokens.size())) { //ref ya da stu da tokenların biri biterse
+                    isMatch = false;
+                }
+
                 if (isMatch) {
-                    bestRef = rIdx;
+                    bestRef = refIndex; //bu öğrenci satırı için hangi ref satırının seçildiğini tutuyor
                     break;
                 }
             }
 
-            if (bestRef >= 0) {
-                usedReferenceLine[bestRef] = true;
-                matches.add(new Pair<>(sIdx + 1, bestRef + 1));
+            if (bestRef >= 0) { //bestRef 0 veya daha büyük (ref satır index’i)  eşleşen satırın indexi
+                usedReferenceLine[bestRef] = true;//bir ref satırını birden fazla öğrenci satırı ile eşleştirmiyor
+                matches.add(new Pair<>(stuIndex + 1, bestRef + 1)); // +1  ler satır sayılaraı 0 dan başlaması için
             }
         }
 
         return matches;
-    }
-
-    public int findBestMatch(RefCode refCode) {
-
-        int bestMatchCount = 0;  // Şu ana kadar bulunan en fazla eşleşen satır sayısı
-        int bestIndex = -1;      // En iyi eşleşen assessment'ın index'i (-1 = hiç eşleşme yok)
-
-        for (int i = 0; i < refCode.getAssessments().size(); i++) {
-
-            Assessment refAssessment = refCode.getAssessments().get(i);
-            // Bu öğrenci assessment'ı ile i. referans assessment'ı arasında en iyi eşleşmeyi bul
-            MatchResult result = this.calculateBestMatch(refAssessment);
-
-            int matchCount = result.matchedLines.size();
-
-            // Bu assessment ile daha fazla satır eşleştiyse, bunu yeni en iyi sonuç olarak kaydet
-            if (matchCount > bestMatchCount) {
-                bestMatchCount = matchCount;  // Yeni rekor eşleşme sayısı
-                bestIndex = i;               // Bu assessment'ın index'i
-            }
-        }
-
-        return bestIndex;
     }
 
     public void toGraphvizWithHighlights(String directory, List<Pair<Integer, Integer>> matchedLines) {

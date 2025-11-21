@@ -326,6 +326,9 @@ public class SymbolTable {
      * Checks if a token is a valid variable name
      */
     public static boolean isVariable(String token) {
+        if (token == null || token.contains(".")) {
+            return false;
+        }
         return token.matches("[a-zA-Z_][a-zA-Z0-9_]*") && !JAVA_KEYWORDS.contains(token);
     }
 

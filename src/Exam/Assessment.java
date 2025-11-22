@@ -18,7 +18,6 @@ public class Assessment {
     private Graph controlFlowGraph;
     private Graph dataDependencyGraph;
 
-    private Map<String, String> astNodeLabels = new HashMap<>();
     private Map<String, String> cfgNodeLabels = new HashMap<>();
     private Map<String, String> ddgNodeLabels = new HashMap<>();
 
@@ -118,171 +117,6 @@ public class Assessment {
     }
 
 
-    // type to string methodu. ve yardımcı methodlar
-    // construct methodu her satıra karşılık gelen line type'ı graph yapısına ekler
-    //******************************
-    private static String constructType(String parent, Graph graph, String line, int j, LineType lineType) {
-        String body = "[BODY] (Line " + j + ")";
-
-        if (lineType.equals(LineType.IF) || lineType.equals(LineType.ELSE_IF)) {
-            String conditionContent = SymbolTable.extractConditionType(line);
-            String condition = "[CONDITION] " + conditionContent + " (Line " + j + ")";
-            String head = "[" + lineType + "] (Line " + j + ")";
-
-            graph.put(parent, head);
-            graph.put(head, condition);
-            graph.put(head, body);
-
-        } else if (lineType.equals(LineType.ELSE)) {
-            String head = "[ELSE] (Line " + j + ")";
-            graph.put(parent, head);
-            graph.put(head, body);
-
-        } else if (lineType.equals(LineType.WHILE) || lineType.equals(LineType.FOR)) {
-            String conditionContent = SymbolTable.extractConditionType(line);
-            String head = "[" + lineType + "] (Line " + j + ")";
-            String condition = "[CONDITION] " + conditionContent + " (Line " + j + ")";
-
-            graph.put(parent, head);
-            graph.put(head, condition);
-            graph.put(head, body);
-        }
-
-        return body;
-    }
-
-
-    // solve fonksiyonundaki döngünün devam edip etmeyeceğini () belirlemek için kullanılır.
-    // örneğin else iften sonra kapalı parantez arkasından else geliyorsa devam.
-
-    // ArrayList<Pair<Integer, LineType>> nesnesinin methodu
-    private static boolean conditionType(int j, ArrayList<Pair<Integer, LineType>> lines) {
-        if (lines.get(j).getValue().equals(LineType.CLOSE)) {
-            return j + 1 != lines.size() &&
-                    (lines.get(j + 1).getValue().equals(LineType.ELSE_IF) || lines.get(j + 1).getValue().equals(LineType.ELSE));
-        }
-        return true;
-    }
-
-
-    // ağaç yapısını oluşturan kısım.
-
-    // ArrayList<Pair<Integer, LineType>> nesnesinin ya da Graphın methodu
-    private static int solveType(int j, ArrayList<Pair<Integer, LineType>> lines, Graph graph, String parent, HashMap<Integer, String> map) {
-
-        String body = constructType(parent, graph, map.get(lines.get(j).getKey()), j, lines.get(j).getValue());
-        j++;
-        int realLineNo = lines.get(j).getKey();
-
-        while (conditionType(j, lines)) {
-            if (lines.get(j).getValue().equals(LineType.CLOSE)) {
-                j++;
-            }
-            LineType cur = lines.get(j).getValue();
-
-            // bu ksıımda satır içeriğini artık kullanmıyoruz.
-            if (cur.equals(LineType.STATEMENT)) {
-                int lineNo = lines.get(j).getKey(); // Satır numarası (gerçek kod satırı numarası)
-                graph.put(body, "[STATEMENT] (Line " + lineNo + ")");
-                j++;
-
-            } else if (cur.equals(LineType.ELSE) || cur.equals(LineType.ELSE_IF)) {
-                j = solveType(j, lines, graph, parent, map);
-
-            } else {
-                j = solveType(j, lines, graph, body, map);
-                j++;
-            }
-        }
-
-        return j;
-    }
-
-
-    // graph'a eklenicek tekrar
-    private static String construct(String parent,
-                                    Graph graph,
-                                    String lineContent,
-                                    int lineNo,
-                                    LineType lineType) {
-
-        // Artık BODY yok – head'in kendisi gövde gibi davranacak
-        String head = lineContent.trim() + " (Line " + lineNo + ")";
-
-        if (lineType == LineType.IF || lineType == LineType.ELSE_IF) {
-            String cond = "[CONDITION] " + SymbolTable.extractCondition(lineContent) + " (Line " + lineNo + ")";
-            graph.put(parent, head);
-            graph.put(head, cond);                // sadece CONDITION çocuğu
-            return head;                          // <-- solve()’a geri head dönüyoruz
-        }
-        if (lineType == LineType.ELSE) {
-            graph.put(parent, head);
-            return head;                          // ELSE’in altına doğrudan statement’lar bağlanacak
-        }
-        if (lineType == LineType.WHILE || lineType == LineType.FOR) {
-            String cond = "[CONDITION] " + SymbolTable.extractCondition(lineContent) + " (Line " + lineNo + ")";
-            graph.put(parent, head);
-            graph.put(head, cond);
-            return head;
-        }
-        return head;      // teorik olarak buraya düşmez ama derleyici mutlu olur
-    }
-
-
-
-    // solve fonksiyonundaki döngünün devam edip etmeyeceğini () belirlemek için kullanılır.
-    // ArrayList<Pair<Integer, LineType>> nesnesinin methodu olacak
-    private static boolean condition(int j, ArrayList<Pair<Integer, LineType>> lines) {
-        if (lines.get(j).getValue().equals(LineType.CLOSE)) {
-            return j + 1 != lines.size() &&
-                    (lines.get(j + 1).getValue().equals(LineType.ELSE_IF) || lines.get(j + 1).getValue().equals(LineType.ELSE));
-        }
-        return true;
-    }
-
-
-    // ArrayList<Pair<Integer, LineType>> nesnesinin methodu olacak
-    private static int solve(int j,
-                             ArrayList<Pair<Integer, LineType>> lines,
-                             Graph graph,
-                             String parent,
-                             HashMap<Integer, String> map) {
-
-        int lineNo = lines.get(j).getKey();               // gerçek satır numarası
-        String body = construct(parent, graph,
-                map.get(lineNo),           // satır içeriği
-                lineNo,
-                lines.get(j).getValue());
-
-        j++;                                              // <-- İLK SATIRI GEÇ
-
-        while (j < lines.size() && condition(j, lines)) {
-
-            if (lines.get(j).getValue() == LineType.CLOSE) {
-                j++;
-                continue;
-            }
-
-            LineType cur = lines.get(j).getValue();
-
-            if (cur == LineType.STATEMENT) {
-                int stmtLineNo = lines.get(j).getKey();   // aynı isimle tekrar tanımlama yok
-
-                // bu kısma trim ekledik: sondaki ve baştaki boşlukları siliyor daha düzgün görüntü oluşturmak için.
-                graph.put(body, map.get(stmtLineNo).trim() + " (Line " + stmtLineNo + ")");
-                j++;
-
-            } else if (cur == LineType.ELSE || cur == LineType.ELSE_IF) {
-                j = solve(j, lines, graph, parent, map);
-
-            } else {                                      // IF / WHILE / FOR vb.
-                j = solve(j, lines, graph, body, map);
-                j++;
-            }
-        }
-        return j;
-    }
-
     public static ArrayList<ArrayList<Graph>> generateGraphsContent(String codeBlock) throws FileNotFoundException {
         ArrayList<ArrayList<Graph>> graphs = new ArrayList<>();
         return generateGraphsContent(codeBlock);
@@ -291,7 +125,7 @@ public class Assessment {
     //--------------------------------------------------------------------------------------------------------------
     // CFG
 
-    private static boolean condition(ArrayList<Pair<Integer, LineType>> lines, ArrayList<String> lasts, String prev) {
+    private static boolean condition(LineTypeList lines, ArrayList<String> lasts, String prev) {
         if (lines.get(0).getValue().equals(LineType.CLOSE)) {
             lasts.add(prev);
             return lines.size() > 1 &&
@@ -304,7 +138,7 @@ public class Assessment {
     private static String ifStatement(
             String prev,
             Graph graph,
-            ArrayList<Pair<Integer, LineType>> lines,
+            LineTypeList lines,
             Map<String,String> nodeLabels,
             HashMap<Integer,String> lineMap
     ) {
@@ -312,7 +146,7 @@ public class Assessment {
         ArrayList<String> lasts = new ArrayList<>();
         boolean hasElse = false;
 
-        while (!lines.isEmpty() && condition(lines, lasts, prev)) {
+        while (!lines.isEmpty() && lines.condition(lasts, prev)) {
             if (lines.get(0).getValue().equals(LineType.CLOSE)) {
                 prev = first;
                 lines.remove(0);
@@ -343,7 +177,7 @@ public class Assessment {
     private static String forStatement(
             String prev,
             Graph graph,
-            ArrayList<Pair<Integer, LineType>> lines,
+            LineTypeList lines,
             Map<String,String> nodeLabels,
             HashMap<Integer,String> lineMap
     ) {
@@ -368,7 +202,7 @@ public class Assessment {
     private static String whileStatement(
             String prev,
             Graph graph,
-            ArrayList<Pair<Integer, LineType>> lines,
+            LineTypeList lines,
             Map<String,String> nodeLabels,
             HashMap<Integer,String> lineMap
     ) {
@@ -394,7 +228,7 @@ public class Assessment {
     private static String addNode(
             String prev,
             Graph graph,
-            ArrayList<Pair<Integer, LineType>> lines,
+            LineTypeList lines,
             Map<String,String> nodeLabels,
             HashMap<Integer,String> lineMap
     ) {
@@ -434,13 +268,11 @@ public class Assessment {
     }
 
 
-
-    // BU KISIM FARKLI - müjganın exam reader'ı, githubdaki son hali.
     private void generateCFGGraph() {
         Graph graph = new Graph();
         cfgNodeLabels.clear();
         try {
-            ArrayList<Pair<Integer, LineType>> block = SymbolTable.convertFromCodeBlock(codeBlock);
+            LineTypeList block = new LineTypeList(SymbolTable.convertFromCodeBlock(codeBlock));
 
             HashMap<Integer, String> lineMap = new HashMap<>();
             String[] lines = codeBlock.split("\n");
@@ -814,14 +646,6 @@ public class Assessment {
                         }
                     }
 
-                    /*
-                    // normal for loop için olan for döngüsü için
-                    else if (itok.size() >= 3 && isTypeToken(itok.get(0))
-                            && isVariable(itok.get(1)) && "=".equals(itok.get(2))) {
-                        addIfAbsent(vars, itok.get(1), itok.get(0));   // k : int
-                    }
-
-                     */
                 }
             }
 
@@ -896,23 +720,6 @@ public class Assessment {
                 addIfAbsent(vars, tok.get(2), tok.get(0) + "*");
             }
 
-            /*
-            //  Klasik tanımlama  T name = ...
-            if (tok.size() >= 3
-                    && isTypeToken(tok.get(0))
-                    && isVariable(tok.get(1))
-                    && "=".equals(tok.get(2))) {
-                addIfAbsent(vars, tok.get(1), tok.get(0));
-            }
-
-            // direkt tanımlama  T name ;
-            if (tok.size() >= 3
-                    && isTypeToken(tok.get(0))
-                    && isVariable(tok.get(1))
-                    && ";".equals(tok.get(2))) {
-                addIfAbsent(vars, tok.get(1), tok.get(0));
-            }
-            */
 
             // (sadece extractTokensWithDots + isVariable ile handle edebildiklerimiz)
             // - if/while/for koşullarındaki değişkenleri

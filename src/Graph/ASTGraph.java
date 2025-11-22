@@ -41,7 +41,7 @@ public class ASTGraph extends Graph {
                 lineMap.put(i + 1, lines[i]);
             }
 
-            ArrayList<Pair<Integer, LineType>> block = SymbolTable.convertFromCodeBlock(codeBlock);
+            LineTypeList block = new LineTypeList(SymbolTable.convertFromCodeBlock(codeBlock));
             if (block.isEmpty()) return;
 
             String parent = "start";
@@ -56,7 +56,8 @@ public class ASTGraph extends Graph {
                     this.put(parent, nodeId);
                     nodeLabels.put(nodeId, lineMap.get(lineNum).trim());
                 } else {
-                    j = solve(j, block, parent, lineMap);
+                    j = block.solve(j, this, parent, lineMap);
+                    updateNodeLabels(lineMap);
                 }
             }
         } catch (Exception e) {
@@ -65,7 +66,19 @@ public class ASTGraph extends Graph {
         }
 
     }
-
+    private void updateNodeLabels(HashMap<Integer, String> lineMap) {
+        for (String nodeId : this.getGraph().keySet()) {
+            if (!nodeLabels.containsKey(nodeId)) {
+                // Node ID'den satır numarasını çıkar
+                try {
+                    int lineNo = Integer.parseInt(nodeId.split("-")[1]);
+                    if (lineMap.containsKey(lineNo)) {
+                        nodeLabels.put(nodeId, lineMap.get(lineNo).trim());
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+    }
     private String constructAST(String parent,
                                 String line,
                                 int lineNumber,

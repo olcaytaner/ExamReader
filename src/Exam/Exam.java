@@ -390,7 +390,7 @@ public class Exam {
         java.nio.file.Path tmpDir = java.nio.file.Files.createTempDirectory("graphviz_tmp_colored_");
         try {
             // Öğrenci–ref kıyası: eşleşen satırlar
-            Assessment.MatchResult match = studentA.calculateBestMatch(referenceA);
+            List<Pair<Integer, Integer>> match = studentA.calculateBestMatch(referenceA);
 
             if (studentA.getAbstractSyntaxTree() != null) {
                 saveColoredPng(
@@ -399,7 +399,7 @@ public class Exam {
                         destDir,
                         prefix + "-ast-colored",
                         studentA.getAstNodeLabels(),
-                        match.matchedLines
+                        match
                 );
             }
             if (studentA.getControlFlowGraph() != null) {
@@ -409,7 +409,7 @@ public class Exam {
                         destDir,
                         prefix + "-cfg-colored",
                         studentA.getCfgNodeLabels(),
-                        match.matchedLines
+                        match
                 );
             }
             if (studentA.getDataDependencyGraph() != null) {
@@ -419,7 +419,7 @@ public class Exam {
                         destDir,
                         prefix + "-ddg-colored",
                         studentA.getDdgNodeLabels(),
-                        match.matchedLines
+                        match
                 );
             }
         } catch (InterruptedException e) {
@@ -671,9 +671,9 @@ public class Exam {
         Path tmpDir = Files.createTempDirectory("graphviz_tmp_refcolors_");
 
         try {
-            Assessment.MatchResult match = studentA.calculateBestMatch(referenceA);
+            List<Pair<Integer, Integer>> match = studentA.calculateBestMatch(referenceA);
             Map<Integer, String> studentLineColors = mapRefColorsToStudent(
-                    match.matchedLines,
+                    match,
                     refLineColors
             );
 

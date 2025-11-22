@@ -264,4 +264,63 @@ public class Graph {
         }
     }
 
+    public String construct(String parent,
+                            String lineContent,
+                            int lineNo,
+                            LineType lineType) {
+
+        String head = lineContent.trim() + " (Line " + lineNo + ")";
+
+        if (lineType == LineType.IF || lineType == LineType.ELSE_IF) {
+            String cond = "[CONDITION] " + SymbolTable.extractCondition(lineContent) + " (Line " + lineNo + ")";
+            this.put(parent, head);
+            this.put(head, cond);
+            return head;
+        }
+        if (lineType == LineType.ELSE) {
+            this.put(parent, head);
+            return head;
+        }
+        if (lineType == LineType.WHILE || lineType == LineType.FOR) {
+            String cond = "[CONDITION] " + SymbolTable.extractCondition(lineContent) + " (Line " + lineNo + ")";
+            this.put(parent, head);
+            this.put(head, cond);
+            return head;
+        }
+        return head;
+    }
+
+    public String constructType(String parent,
+                                String line,
+                                int j,
+                                LineType lineType) {
+        String body = "[BODY] (Line " + j + ")";
+
+        if (lineType.equals(LineType.IF) || lineType.equals(LineType.ELSE_IF)) {
+            String conditionContent = SymbolTable.extractConditionType(line);
+            String condition = "[CONDITION] " + conditionContent + " (Line " + j + ")";
+            String head = "[" + lineType + "] (Line " + j + ")";
+
+            this.put(parent, head);
+            this.put(head, condition);
+            this.put(head, body);
+
+        } else if (lineType.equals(LineType.ELSE)) {
+            String head = "[ELSE] (Line " + j + ")";
+            this.put(parent, head);
+            this.put(head, body);
+
+        } else if (lineType.equals(LineType.WHILE) || lineType.equals(LineType.FOR)) {
+            String conditionContent = SymbolTable.extractConditionType(line);
+            String head = "[" + lineType + "] (Line " + j + ")";
+            String condition = "[CONDITION] " + conditionContent + " (Line " + j + ")";
+
+            this.put(parent, head);
+            this.put(head, condition);
+            this.put(head, body);
+        }
+
+        return body;
+    }
+
 }

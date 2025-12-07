@@ -15,21 +15,16 @@ public class Assessment {
     private final String codeBlock;
     private Code code;
     private ASTGraph abstractSyntaxTree;
-    private Graph controlFlowGraph;
+    private CFGGraph controlFlowGraph;
     private Graph dataDependencyGraph;
 
-    private Map<String, String> cfgNodeLabels = new HashMap<>();
     private Map<String, String> ddgNodeLabels = new HashMap<>();
 
-    private boolean cfgFailed = false;
     private boolean ddgFailed = false;
 
-    public boolean isCfgFailed() { return cfgFailed; }
+
     public boolean isDdgFailed() { return ddgFailed; }
 
-    public Map<String, String> getCfgNodeLabels() {
-        return cfgNodeLabels;
-    }
 
     public Map<String, String> getDdgNodeLabels() {
         return ddgNodeLabels;
@@ -84,8 +79,21 @@ public class Assessment {
     }
 
     public Map<String, String> getAstNodeLabels() {
-        return abstractSyntaxTree != null ? abstractSyntaxTree.getNodeLabels() : new HashMap<>();
+        return abstractSyntaxTree.getNodeLabels();
     }
+
+    //-----new cfg methods - short adapted version -----
+    private void generateCFGGraph(){
+        controlFlowGraph = new CFGGraph();
+        controlFlowGraph.generateFromCodeBlock(codeBlock);
+    }
+    public boolean isCfgFailed() { return controlFlowGraph.isGenerationFailed(); }
+
+    public Map<String, String> getCfgNodeLabels() {
+        return controlFlowGraph.getNodeLabels();
+    }
+
+    //-----new cfg methods - short adapted version -----
 
     //----------------------------------------------
     public String getCodeBlock() {
@@ -120,178 +128,6 @@ public class Assessment {
     public static ArrayList<ArrayList<Graph>> generateGraphsContent(String codeBlock) throws FileNotFoundException {
         ArrayList<ArrayList<Graph>> graphs = new ArrayList<>();
         return generateGraphsContent(codeBlock);
-    }
-
-    //--------------------------------------------------------------------------------------------------------------
-    // CFG
-
-    private static boolean condition(LineTypeList lines, ArrayList<String> lasts, String prev) {
-        if (lines.get(0).getValue().equals(LineType.CLOSE)) {
-            lasts.add(prev);
-            return lines.size() > 1 &&
-                    (lines.get(1).getValue().equals(LineType.ELSE_IF) || lines.get(1).getValue().equals(LineType.ELSE));
-        }
-        return true;
-    }
-
-
-    private static String ifStatement(
-            String prev,
-            Graph graph,
-            LineTypeList lines,
-            Map<String,String> nodeLabels,
-            HashMap<Integer,String> lineMap
-    ) {
-        String first = prev;
-        ArrayList<String> lasts = new ArrayList<>();
-        boolean hasElse = false;
-
-        while (!lines.isEmpty() && lines.condition(lasts, prev)) {
-            if (lines.get(0).getValue().equals(LineType.CLOSE)) {
-                prev = first;
-                lines.remove(0);
-                if (!lines.isEmpty() && lines.get(0).getValue().equals(LineType.ELSE)) {
-                    hasElse = true;
-                }
-                if (!lines.isEmpty()) lines.remove(0);
-            }
-
-            if (!lines.isEmpty() && !lines.get(0).getValue().equals(LineType.CLOSE)) {
-                prev = addNode(prev, graph, lines, nodeLabels, lineMap);
-            }
-        }
-
-        if (!lines.isEmpty()) lines.remove(0); // kapanış parantezini at
-
-        String end = "end-" + first;
-        for (String last : lasts) {
-            graph.put(last, end);
-        }
-        if (!hasElse) {
-            graph.put(first, end);
-        }
-
-        return end;
-    }
-
-    private static String forStatement(
-            String prev,
-            Graph graph,
-            LineTypeList lines,
-            Map<String,String> nodeLabels,
-            HashMap<Integer,String> lineMap
-    ) {
-        String first = prev;
-        while (!lines.isEmpty() && !lines.get(0).getValue().equals(LineType.CLOSE)) {
-            prev = addNode(prev, graph, lines, nodeLabels, lineMap);
-        }
-        if (!lines.isEmpty()) {
-            lines.remove(0);
-        }
-        graph.put(prev, first);
-
-
-        try {
-            int lineNo = Integer.parseInt(first.split("-")[1]);
-            nodeLabels.put(first, lineMap.get(lineNo).trim());
-        } catch (Exception ignored) {}
-
-        return prev;
-    }
-
-    private static String whileStatement(
-            String prev,
-            Graph graph,
-            LineTypeList lines,
-            Map<String,String> nodeLabels,
-            HashMap<Integer,String> lineMap
-    ) {
-        String first = prev;
-        while (!lines.isEmpty() && !lines.get(0).getValue().equals(LineType.CLOSE)) {
-            prev = addNode(prev, graph, lines, nodeLabels, lineMap);
-        }
-        if (!lines.isEmpty()) {
-            lines.remove(0);
-        }
-        graph.put(prev, first);
-
-
-        try {
-            int lineNo = Integer.parseInt(first.split("-")[1]);
-            nodeLabels.put(first, lineMap.get(lineNo).trim());
-        } catch (Exception ignored) {}
-
-        return first;
-    }
-
-
-    private static String addNode(
-            String prev,
-            Graph graph,
-            LineTypeList lines,
-            Map<String,String> nodeLabels,
-            HashMap<Integer,String> lineMap
-    ) {
-        Pair<Integer, LineType> pair = lines.remove(0);
-        String cur;
-        int lineNo = pair.getKey();
-        String lineContent = lineMap.get(lineNo).trim();
-
-        switch (pair.getValue()) {
-            case IF:
-                cur = "if-" + lineNo;
-                graph.put(prev, cur);
-                nodeLabels.put(cur, lineContent); // label = kod satırı
-                return ifStatement(cur, graph, lines, nodeLabels, lineMap);
-
-            case STATEMENT:
-                cur = "statement-" + lineNo;
-                graph.put(prev, cur);
-                nodeLabels.put(cur, lineContent); // label = kod satırı
-                return cur;
-
-            case FOR:
-                cur = "for-" + lineNo;
-                graph.put(prev, cur);
-                nodeLabels.put(cur, lineContent);
-                return forStatement(cur, graph, lines, nodeLabels, lineMap);
-
-            case WHILE:
-                cur = "while-" + lineNo;
-                graph.put(prev, cur);
-                nodeLabels.put(cur, lineContent);
-                return whileStatement(cur, graph, lines, nodeLabels, lineMap);
-
-            default:
-                return prev;
-        }
-    }
-
-
-    private void generateCFGGraph() {
-        Graph graph = new Graph();
-        cfgNodeLabels.clear();
-        try {
-            LineTypeList block = new LineTypeList(SymbolTable.convertFromCodeBlock(codeBlock));
-
-            HashMap<Integer, String> lineMap = new HashMap<>();
-            String[] lines = codeBlock.split("\n");
-            for (int i = 0; i < lines.length; i++) {
-                lineMap.put(i + 1, lines[i]);
-            }
-
-            String prev = "start-0";
-            cfgNodeLabels.put(prev, "start");
-
-            while (!block.isEmpty()) {
-                prev = addNode(prev, graph, block, cfgNodeLabels, lineMap);
-            }
-            this.controlFlowGraph = graph;
-        } catch (Exception e) {
-            cfgFailed = true;
-            this.controlFlowGraph = new Graph();
-            System.err.println("Cannot generate CFG: " + e.getMessage());
-        }
     }
 
 
@@ -535,7 +371,7 @@ public class Assessment {
                 abstractSyntaxTree.saveGraphviz(directory, "ast", "AST", abstractSyntaxTree.getNodeLabels());
             }
             if (controlFlowGraph != null) {
-                controlFlowGraph.saveGraphviz(directory, "cfg", "CFG", cfgNodeLabels);
+                controlFlowGraph.saveGraphviz(directory, "cfg", "CFG", controlFlowGraph.getNodeLabels());
             }
             if (dataDependencyGraph != null) {
                 dataDependencyGraph.saveGraphviz(directory, "ddg", "DDG", ddgNodeLabels);
@@ -964,7 +800,7 @@ public class Assessment {
                 abstractSyntaxTree.saveGraphviz(directory, "ast_highlighted", "AST_Highlighted", abstractSyntaxTree.getNodeLabels(), highlightLines);
             }
             if (controlFlowGraph != null) {
-                controlFlowGraph.saveGraphviz(directory, "cfg_highlighted", "CFG_Highlighted", cfgNodeLabels, highlightLines);
+                controlFlowGraph.saveGraphviz(directory, "cfg_highlighted", "CFG_Highlighted", controlFlowGraph.getNodeLabels(), highlightLines);
             }
             if (dataDependencyGraph != null) {
                 dataDependencyGraph.saveGraphviz(directory, "ddg_highlighted", "DDG_Highlighted", ddgNodeLabels, highlightLines);

@@ -8,7 +8,6 @@ public class CFGGraph extends Graph {
     private Map<String, String> nodeLabels = new HashMap<>();
     private boolean generationFailed = false;
 
-
     public CFGGraph() {
         super();
     }

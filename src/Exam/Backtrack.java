@@ -36,7 +36,7 @@ public class Backtrack {
         backtrack(a, 0);
     }
 
-    // backtrack(int a[], int k, data input)
+    // backtrack algoritması (int a[], int k, data input)
     void backtrack(Map<String, String> a, int k) {
 
         int n = studentVars.size();
@@ -45,11 +45,11 @@ public class Backtrack {
             processSolution(a, k);
         }
 
-        // GÜVENLİK: k sınırı
+        // k sınırı
         if (k >= studentVars.size()) return;
 
         List<String> c = new ArrayList<>();
-        int[] ncandidates = new int[1];   // C'deki int *ncandidates karşılığı
+        int[] ncandidates = new int[1];   // *ncandidates
 
         constructCandidates(a, k, n, c, ncandidates);
 
@@ -61,8 +61,7 @@ public class Backtrack {
             return;
         }
 
-        // Sadece eşleştirme yaparak devam et (eşleştirme yapmadan devam et seçeneğini kaldırdık)
-        // Bu performansı önemli ölçüde artırır
+        // Sadece eşleştirme yaparak devam et 
         for (int i = 0; i < ncandidates[0]; i++) {
 
             a.put(studentVar, c.get(i));   // a[k] = c[i]
@@ -75,7 +74,7 @@ public class Backtrack {
         }
     }
 
-    // is_a_solution(int a[], int k, int n)
+    // Çözüm kontrolü (int a[], int k, int n)
     boolean isSolution(Map<String, String> a, int k, int n) {
         if (k == n) return true;
         
@@ -92,7 +91,7 @@ public class Backtrack {
         return false;
     }
 
-    // construct_candidates(int a[], int k, int n, int c[], int *ncandidates)
+    // Adayları oluştur (int a[], int k, int n, int c[], int *ncandidates)
     void constructCandidates(
             Map<String, String> a,
             int k,
@@ -114,7 +113,7 @@ public class Backtrack {
         ncandidates[0] = c.size();   // *ncandidates = 2; karşılığı
     }
 
-    // process_solution(int a[], int k)
+    // Çözümü işle (int a[], int k)
     void processSolution(Map<String, String> a, int k) {
 
         String normalized = normalizeCodeWithMapping(studentCode, a);
@@ -130,7 +129,7 @@ public class Backtrack {
         }
     }
 
-    // normalize code with mapping
+    // Eşleştirme ile kodu normalize et
     String normalizeCodeWithMapping(String code, Map<String, String> mapping) {
 
         String normalized = code;
@@ -145,7 +144,7 @@ public class Backtrack {
         return normalized;
     }
 
-    // calculate match score for only string
+    // Sadece boş olmayan satırlar için eşleşme skorunu hesapla
     double calculateMatchScore(String[] studentLines, String[] refLines) {
 
         int matchCount = 0;
@@ -186,7 +185,7 @@ public class Backtrack {
         return (100.0 * matchCount) / nonEmptyRefLines;
     }
 
-    // get best mapping
+    // En iyi eşleştirmeyi getir
     public Map<String, String> getBestMapping() {
         return bestMapping;
     }
